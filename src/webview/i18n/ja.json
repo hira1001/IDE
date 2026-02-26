@@ -1,0 +1,90 @@
+{
+  "app": {
+    "title": "AI Agent Orchestrator",
+    "chatPlaceholder": "AIチームを構成する指示を入力... (例: 記事を書いてレビューするフローを作って)",
+    "sourceIndicator": "入力ソース",
+    "noSource": "アクティブなファイルがありません。入力として使用するファイルをエディタで開いてください。",
+    "addStep": "+ ステップを追加",
+    "generate": "生成",
+    "preview": "プレビュー",
+    "run": "実行",
+    "stop": "停止",
+    "resume": "続行",
+    "saveTemplate": "テンプレートとして保存",
+    "loadTemplate": "テンプレートを読み込む"
+  },
+  "step": {
+    "parallel": "並列",
+    "sequential": "直列",
+    "conditional": "条件分岐",
+    "pauseAfter": "完了後に一時停止",
+    "deleteStep": "ステップを削除",
+    "addCard": "+ エージェントを追加"
+  },
+  "card": {
+    "name": "エージェント名",
+    "persona": "ペルソナ",
+    "instructions": "作業手順",
+    "addInstruction": "+ 手順を追加",
+    "constraints": "制約条件",
+    "addConstraint": "+ 制約を追加",
+    "inputMapping": "入力マッピング",
+    "outputKey": "出力キー",
+    "outputFormat": "出力形式",
+    "model": "使用モデル",
+    "handoverNote": "引き継ぎメモを有効にする",
+    "retry": "再実行",
+    "editOutput": "出力を編集",
+    "viewOutput": "全文を見る",
+    "status": {
+      "idle": "待機中",
+      "running": "実行中",
+      "validating": "検証中",
+      "retrying": "フォーマット修正中",
+      "paused": "一時停止",
+      "completed": "完了",
+      "error": "エラー",
+      "skipped": "スキップ",
+      "aborted": "停止済み"
+    }
+  },
+  "dryrun": {
+    "title": "ドライラン結果",
+    "estimatedTokens": "推定トークン数",
+    "estimatedCost": "概算コスト",
+    "providers": "使用プロバイダー",
+    "min": "最小",
+    "max": "最大",
+    "close": "閉じる",
+    "executeNow": "このまま実行"
+  },
+  "breakpoint": {
+    "title": "ステップ完了 — 一時停止中",
+    "description": "以下の出力を確認・編集してから続行してください:",
+    "continue": "▶ 続行",
+    "stop": "⏹ 停止"
+  },
+  "template": {
+    "title": "テンプレート",
+    "name": "テンプレート名",
+    "description": "説明",
+    "tags": "タグ（カンマ区切り）",
+    "save": "保存",
+    "cancel": "キャンセル",
+    "scope": "保存先",
+    "workspace": "ワークスペース",
+    "global": "グローバル",
+    "noTemplates": "テンプレートはまだありません。",
+    "load": "読み込む",
+    "delete": "削除"
+  },
+  "validation": {
+    "error": "バリデーションエラー",
+    "warning": "警告",
+    "proceed": "続行",
+    "cancel": "キャンセル"
+  },
+  "cost": {
+    "estimated": "概算コスト"
+  }
+}

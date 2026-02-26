@@ -1,0 +1,90 @@
+{
+  "app": {
+    "title": "AI Agent Orchestrator",
+    "chatPlaceholder": "Describe the AI team you want to build... (e.g. Draft an article then review it)",
+    "sourceIndicator": "Input source",
+    "noSource": "No active file. Open a file in the editor to use as input.",
+    "addStep": "+ Add Step",
+    "generate": "Generate",
+    "preview": "Preview",
+    "run": "Run",
+    "stop": "Stop",
+    "resume": "Resume",
+    "saveTemplate": "Save as Template",
+    "loadTemplate": "Load Template"
+  },
+  "step": {
+    "parallel": "Parallel",
+    "sequential": "Sequential",
+    "conditional": "Conditional",
+    "pauseAfter": "Pause after step",
+    "deleteStep": "Delete step",
+    "addCard": "+ Add Agent"
+  },
+  "card": {
+    "name": "Agent Name",
+    "persona": "Persona",
+    "instructions": "Instructions",
+    "addInstruction": "+ Add instruction",
+    "constraints": "Constraints",
+    "addConstraint": "+ Add constraint",
+    "inputMapping": "Input Mapping",
+    "outputKey": "Output Key",
+    "outputFormat": "Output Format",
+    "model": "Model",
+    "handoverNote": "Enable Handover Note",
+    "retry": "Retry",
+    "editOutput": "Edit Output",
+    "viewOutput": "View Full Output",
+    "status": {
+      "idle": "Idle",
+      "running": "Running",
+      "validating": "Validating",
+      "retrying": "Retrying format",
+      "paused": "Paused",
+      "completed": "Completed",
+      "error": "Error",
+      "skipped": "Skipped",
+      "aborted": "Aborted"
+    }
+  },
+  "dryrun": {
+    "title": "Dry Run Preview",
+    "estimatedTokens": "Estimated tokens",
+    "estimatedCost": "Estimated cost",
+    "providers": "Providers used",
+    "min": "min",
+    "max": "max",
+    "close": "Close",
+    "executeNow": "Run Now"
+  },
+  "breakpoint": {
+    "title": "Step Paused — Review & Edit",
+    "description": "Review the outputs below and edit if needed, then continue.",
+    "continue": "Continue",
+    "stop": "Stop"
+  },
+  "template": {
+    "title": "Templates",
+    "name": "Template Name",
+    "description": "Description",
+    "tags": "Tags (comma-separated)",
+    "save": "Save",
+    "cancel": "Cancel",
+    "scope": "Save to",
+    "workspace": "Workspace",
+    "global": "Global",
+    "noTemplates": "No templates saved yet.",
+    "load": "Load",
+    "delete": "Delete"
+  },
+  "validation": {
+    "error": "Validation Error",
+    "warning": "Warning",
+    "proceed": "Proceed",
+    "cancel": "Cancel"
+  },
+  "cost": {
+    "estimated": "Est. cost"
+  }
+}

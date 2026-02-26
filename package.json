@@ -1,0 +1,104 @@
+{
+  "name": "ai-agent-orchestrator",
+  "displayName": "AI Agent Orchestrator",
+  "description": "Orchestrate multiple AI agents for development tasks in VS Code",
+  "version": "0.1.0",
+  "publisher": "ai-agent-orchestrator",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "AI",
+    "Other"
+  ],
+  "keywords": [
+    "AI",
+    "agent",
+    "orchestrator",
+    "LLM",
+    "workflow"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ai-agent-orchestrator/vscode-extension"
+  },
+  "icon": "media/icon.png",
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "aiAgentOrchestrator.openPanel",
+        "title": "%commands.openPanel%",
+        "category": "AI Agent"
+      },
+      {
+        "command": "aiAgentOrchestrator.createFromTemplate",
+        "title": "%commands.createFromTemplate%",
+        "category": "AI Agent"
+      },
+      {
+        "command": "aiAgentOrchestrator.configureApiKeys",
+        "title": "%commands.configureApiKeys%",
+        "category": "AI Agent"
+      }
+    ],
+    "configuration": {
+      "title": "AI Agent Orchestrator",
+      "properties": {
+        "aiAgentOrchestrator.defaultModel": {
+          "type": "string",
+          "default": "gpt-4o",
+          "description": "%config.defaultModel%"
+        },
+        "aiAgentOrchestrator.language": {
+          "type": "string",
+          "enum": ["en", "ja"],
+          "default": "en",
+          "description": "%config.language%"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "npm run build:extension && npm run build:webview",
+    "build:extension": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify",
+    "build:webview": "esbuild src/webview/index.tsx --bundle --outfile=dist/webview.js --format=esm --jsx=automatic --minify",
+    "dev": "npm run dev:extension & npm run dev:webview",
+    "dev:extension": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap --watch",
+    "dev:webview": "esbuild src/webview/index.tsx --bundle --outfile=dist/webview.js --format=esm --jsx=automatic --sourcemap --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:extension": "node ./dist/test/runTest.js",
+    "lint": "eslint src --ext ts,tsx",
+    "format": "prettier --write 'src/**/*.{ts,tsx,json}'",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.webview.json"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.27.0",
+    "@google/generative-ai": "^0.15.0",
+    "@vscode/webview-ui-toolkit": "^1.4.0",
+    "i18next": "^23.14.0",
+    "openai": "^4.57.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "react-i18next": "^15.0.0",
+    "uuid": "^10.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@types/uuid": "^10.0.0",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "esbuild": "^0.21.0",
+    "eslint": "^8.57.0",
+    "prettier": "^3.3.0",
+    "typescript": "^5.5.0",
+    "vitest": "^1.6.0"
+  }
+}

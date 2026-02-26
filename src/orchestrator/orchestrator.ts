@@ -1,0 +1,391 @@
+import {
+  WorkflowConfig,
+  WorkflowStep,
+  Task,
+  Agent,
+  SourceInput,
+  SerializedExecutionState,
+  HandoverNote,
+} from '../types/index.js';
+import { StateManager } from './stateManager.js';
+import { PromptBuilder } from './promptBuilder.js';
+import { OutputValidator } from './outputValidator.js';
+import { ConditionEvaluator } from './conditionEvaluator.js';
+import { AbortManager } from './abortManager.js';
+import { getGateway, ApiKeys } from '../llm/gateway.js';
+import { getCostForTokens } from '../llm/pricing.js';
+
+export type StatusCallback = (state: SerializedExecutionState) => void;
+export type PauseCallback = (stepIndex: number, outputs: Record<string, string>) => Promise<void>;
+
+export interface OrchestratorOptions {
+  apiKeys: ApiKeys;
+  onStatusUpdate: StatusCallback;
+  onPause?: PauseCallback;
+  /** Timeout for each LLM call in ms (default: 60000) */
+  timeout?: number;
+}
+
+/**
+ * Core Orchestrator — Executes a WorkflowConfig step by step.
+ * Handles parallel, sequential, and conditional steps.
+ * Integrates Output Validator, Condition Evaluator, and Abort Manager.
+ */
+export class Orchestrator {
+  private readonly stateManager: StateManager;
+  private readonly outputValidator: OutputValidator;
+  private readonly conditionEvaluator: ConditionEvaluator;
+  private readonly abortManager: AbortManager;
+  private readonly timeout: number;
+
+  constructor(private readonly options: OrchestratorOptions) {
+    this.stateManager = new StateManager();
+    this.outputValidator = new OutputValidator();
+    this.conditionEvaluator = new ConditionEvaluator();
+    this.abortManager = new AbortManager();
+    this.timeout = options.timeout ?? 60_000;
+  }
+
+  getStateManager(): StateManager {
+    return this.stateManager;
+  }
+
+  async execute(config: WorkflowConfig, source: SourceInput): Promise<void> {
+    this.stateManager.reset();
+    this.stateManager.setSource(source);
+    this.stateManager.setStatus('running');
+
+    // Initialize task states
+    for (const step of config.workflow) {
+      for (const task of step.tasks) {
+        this.stateManager.initTaskState(task.task_id);
+      }
+    }
+
+    this.emit();
+
+    try {
+      await this.runWorkflow(config);
+      this.stateManager.setStatus('completed');
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') {
+        this.stateManager.setStatus('aborted');
+      } else {
+        this.stateManager.setStatus('error');
+        console.error('[Orchestrator] Fatal error:', err);
+      }
+    } finally {
+      this.abortManager.clear();
+      this.emit();
+    }
+  }
+
+  abort(): void {
+    this.abortManager.abortAll();
+    this.stateManager.setStatus('aborted');
+    this.emit();
+  }
+
+  async retryTask(taskId: string, config: WorkflowConfig): Promise<void> {
+    const task = config.workflow.flatMap((s) => s.tasks).find((t) => t.task_id === taskId);
+    const step = config.workflow.find((s) => s.tasks.some((t) => t.task_id === taskId));
+    const agent = task ? config.agents.find((a) => a.id === task.agent_id) : undefined;
+
+    if (!task || !step || !agent) {
+      throw new Error(`Task ${taskId} not found in config.`);
+    }
+
+    this.stateManager.initTaskState(taskId);
+    this.emit();
+
+    const source = this.stateManager.getSource();
+    const promptBuilder = new PromptBuilder(this.stateManager, source);
+    await this.runTask(task, agent, step.step, config, promptBuilder);
+    this.emit();
+  }
+
+  manualEditOutput(outputKey: string, content: string, step: number): void {
+    this.stateManager.setOutput(outputKey, content);
+    this.stateManager.log(step, '__manual__', 'manual_edit', `output_key: ${outputKey}`);
+    this.emit();
+  }
+
+  resumeFromPause(): void {
+    this.stateManager.setStatus('running');
+    this.emit();
+  }
+
+  // ─── Internal Execution ───────────────────────────────────────────────────
+
+  private async runWorkflow(config: WorkflowConfig): Promise<void> {
+    const { workflow } = config;
+    let stepIndex = 0;
+
+    while (stepIndex < workflow.length) {
+      const step = workflow[stepIndex];
+      this.stateManager.setCurrentStep(step.step);
+      this.emit();
+
+      const source = this.stateManager.getSource();
+      const promptBuilder = new PromptBuilder(this.stateManager, source);
+
+      if (this.stateManager.getStatus() === 'aborted') break;
+
+      if (step.type === 'parallel') {
+        await this.runParallelStep(step, config, promptBuilder);
+      } else if (step.type === 'sequential') {
+        await this.runSequentialStep(step, config, promptBuilder);
+      } else if (step.type === 'conditional') {
+        const nextStep = await this.runConditionalStep(step, config, promptBuilder, stepIndex);
+        if (nextStep !== null) {
+          stepIndex = nextStep;
+          continue;
+        }
+      }
+
+      if (step.pause_after && this.stateManager.getStatus() !== 'aborted') {
+        await this.handlePause(step, config);
+        if (this.stateManager.getStatus() === 'aborted') break;
+      }
+
+      // Handle then_goto (loop back after fix step)
+      if (step.then_goto !== undefined) {
+        const gotoIdx = workflow.findIndex((s) => s.step === step.then_goto);
+        if (gotoIdx !== -1) {
+          stepIndex = gotoIdx;
+          this.stateManager.log(step.step, '__orchestrator__', 'loop', `goto step ${step.then_goto}`);
+          this.emit();
+          continue;
+        }
+      }
+
+      stepIndex++;
+    }
+  }
+
+  private async runParallelStep(
+    step: WorkflowStep,
+    config: WorkflowConfig,
+    promptBuilder: PromptBuilder
+  ): Promise<void> {
+    const agents = config.agents;
+    const tasks = step.tasks.map((task) => {
+      const agent = agents.find((a) => a.id === task.agent_id);
+      if (!agent) throw new Error(`Agent ${task.agent_id} not found.`);
+      return this.runTask(task, agent, step.step, config, promptBuilder);
+    });
+
+    await Promise.all(tasks);
+  }
+
+  private async runSequentialStep(
+    step: WorkflowStep,
+    config: WorkflowConfig,
+    promptBuilder: PromptBuilder
+  ): Promise<void> {
+    for (const task of step.tasks) {
+      if (this.stateManager.getStatus() === 'aborted') break;
+      const agent = config.agents.find((a) => a.id === task.agent_id);
+      if (!agent) throw new Error(`Agent ${task.agent_id} not found.`);
+      await this.runTask(task, agent, step.step, config, promptBuilder);
+    }
+  }
+
+  /** Returns the next stepIndex override, or null to continue normally. */
+  private async runConditionalStep(
+    step: WorkflowStep,
+    config: WorkflowConfig,
+    promptBuilder: PromptBuilder,
+    currentStepIndex: number
+  ): Promise<number | null> {
+    if (!step.condition) return null;
+
+    for (const task of step.tasks) {
+      if (this.stateManager.getStatus() === 'aborted') break;
+      const agent = config.agents.find((a) => a.id === task.agent_id);
+      if (!agent) throw new Error(`Agent ${task.agent_id} not found.`);
+      await this.runTask(task, agent, step.step, config, promptBuilder);
+    }
+
+    if (this.stateManager.getStatus() === 'aborted') return null;
+
+    // Evaluate condition using the evaluator agent's output
+    const evalTask = step.tasks.find((t) => t.agent_id === step.condition!.evaluator_agent_id);
+    if (!evalTask) return null;
+
+    const output = this.stateManager.getOutput(evalTask.output_key) ?? '';
+    const result = this.conditionEvaluator.evaluate(output, step.condition);
+
+    const loopCount = this.stateManager.incrementLoopCount(step.step);
+    const maxLoops = step.condition.max_loops;
+
+    if (result === 'pass' || loopCount >= maxLoops) {
+      // Pass or forced pass (max loops reached)
+      if (loopCount >= maxLoops && result !== 'pass') {
+        this.stateManager.log(step.step, '__orchestrator__', 'loop', `max_loops (${maxLoops}) reached, forcing pass`);
+      }
+      return null; // Proceed to next step
+    }
+
+    // Fail → jump to on_fail_goto
+    if (step.on_fail_goto !== undefined) {
+      const gotoIdx = config.workflow.findIndex((s) => s.step === step.on_fail_goto);
+      this.stateManager.log(step.step, '__orchestrator__', 'loop', `REVISION_NEEDED → goto step ${step.on_fail_goto}`);
+      this.emit();
+      return gotoIdx !== -1 ? gotoIdx : null;
+    }
+
+    return null;
+  }
+
+  private async runTask(
+    task: Task,
+    agent: Agent,
+    stepNumber: number,
+    config: WorkflowConfig,
+    promptBuilder: PromptBuilder
+  ): Promise<void> {
+    const taskId = task.task_id;
+
+    this.stateManager.setTaskStatus(taskId, 'running');
+    this.stateManager.log(stepNumber, taskId, 'start');
+    this.emit();
+
+    const loopCount = this.stateManager.getLoopCount(stepNumber);
+    const systemPrompt = promptBuilder.buildSystemPrompt(agent, task, loopCount);
+    const userPrompt = promptBuilder.buildUserPrompt(task, config);
+
+    try {
+      const gateway = getGateway(agent.model, this.options.apiKeys);
+      const start = Date.now();
+
+      let response = await this.callWithTimeout(
+        gateway.chat({ model: agent.model, system_prompt: systemPrompt, user_prompt: userPrompt }),
+        this.timeout
+      );
+
+      // Validate output
+      this.stateManager.setTaskStatus(taskId, 'validating');
+      this.emit();
+
+      let validation = this.outputValidator.validate(response.content, task.output_format);
+
+      if (!validation.pass) {
+        this.stateManager.log(stepNumber, taskId, 'validation_fail', validation.reason);
+        this.stateManager.setTaskStatus(taskId, 'retrying');
+        this.stateManager.incrementRetry(taskId);
+        this.emit();
+
+        // Auto-retry once
+        const retrySystemPrompt = promptBuilder.buildRetryPrompt(response.content, task.output_format);
+        response = await this.callWithTimeout(
+          gateway.chat({ model: agent.model, system_prompt: systemPrompt, user_prompt: retrySystemPrompt }),
+          this.timeout
+        );
+
+        validation = this.outputValidator.validate(response.content, task.output_format);
+        if (validation.pass) {
+          this.stateManager.setValidationResult(taskId, 'retried_pass');
+          this.stateManager.log(stepNumber, taskId, 'validation_pass', 'passed after retry');
+        } else {
+          this.stateManager.setValidationResult(taskId, 'fail');
+          this.stateManager.log(stepNumber, taskId, 'validation_fail', 'retry also failed');
+        }
+      } else {
+        this.stateManager.setValidationResult(taskId, 'pass');
+        this.stateManager.log(stepNumber, taskId, 'validation_pass');
+      }
+
+      // Extract handover note if enabled
+      const { mainContent, note } = this.outputValidator.extractHandoverNote(response.content);
+
+      if (task.enable_handover_note && note) {
+        const handoverNote: HandoverNote = {
+          from_agent_id: agent.id,
+          from_step: stepNumber,
+          note,
+        };
+        this.stateManager.addHandoverNote(handoverNote);
+      }
+
+      // Store output (always latest wins — overwrites previous for same key in loops)
+      this.stateManager.setOutput(task.output_key, mainContent);
+
+      // Record token usage and cost
+      const cost = getCostForTokens(agent.model, response.input_tokens, response.output_tokens);
+      this.stateManager.addTokenUsage(response.input_tokens, response.output_tokens, cost);
+
+      const duration = Date.now() - start;
+      this.stateManager.updateTaskState(taskId, {
+        status: 'completed',
+        input_tokens: response.input_tokens,
+        output_tokens: response.output_tokens,
+        duration_ms: duration,
+      });
+      this.stateManager.log(stepNumber, taskId, 'complete', `${response.input_tokens}in+${response.output_tokens}out tokens`);
+    } catch (err) {
+      const message = (err as Error).message ?? 'Unknown error';
+      if ((err as Error).name === 'AbortError') {
+        this.stateManager.setTaskStatus(taskId, 'aborted');
+        this.stateManager.log(stepNumber, taskId, 'abort');
+      } else {
+        this.stateManager.setTaskError(taskId, message);
+        this.stateManager.log(stepNumber, taskId, 'error', message);
+      }
+    }
+
+    this.emit();
+  }
+
+  private async handlePause(step: WorkflowStep, config: WorkflowConfig): Promise<void> {
+    this.stateManager.setStatus('paused');
+    this.stateManager.log(step.step, '__orchestrator__', 'pause');
+    this.emit();
+
+    if (this.options.onPause) {
+      const outputs: Record<string, string> = {};
+      for (const task of step.tasks) {
+        const output = this.stateManager.getOutput(task.output_key);
+        if (output !== undefined) {
+          outputs[task.output_key] = output;
+        }
+      }
+      await this.options.onPause(step.step, outputs);
+    }
+
+    // Wait until status is changed back to 'running' (via resumeFromPause)
+    await this.waitForResume();
+    this.stateManager.log(step.step, '__orchestrator__', 'resume');
+  }
+
+  private waitForResume(): Promise<void> {
+    return new Promise<void>((resolve) => {
+      const check = () => {
+        const status = this.stateManager.getStatus();
+        if (status === 'running' || status === 'aborted') {
+          resolve();
+        } else {
+          setTimeout(check, 200);
+        }
+      };
+      check();
+    });
+  }
+
+  private callWithTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error(`LLM API call timed out after ${ms}ms`));
+      }, ms);
+
+      promise.then(
+        (value) => { clearTimeout(timer); resolve(value); },
+        (err) => { clearTimeout(timer); reject(err); }
+      );
+    });
+  }
+
+  private emit(): void {
+    this.options.onStatusUpdate(this.stateManager.serialize());
+  }
+}
