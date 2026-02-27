@@ -114,6 +114,24 @@ export class TemplateManager {
     if (!raw.config || !raw.schema_version) {
       throw new Error('Invalid template JSON: missing schema_version or config.');
     }
+    if (!Array.isArray(raw.config.agents) || raw.config.agents.length === 0) {
+      throw new Error('Invalid template JSON: config.agents must be a non-empty array.');
+    }
+    if (!Array.isArray(raw.config.workflow) || raw.config.workflow.length === 0) {
+      throw new Error('Invalid template JSON: config.workflow must be a non-empty array.');
+    }
+    // Verify each agent has required fields
+    for (const agent of raw.config.agents) {
+      if (!agent.id || !agent.name || !agent.model) {
+        throw new Error('Invalid template JSON: each agent must have id, name, and model.');
+      }
+    }
+    // Verify each step has required fields
+    for (const step of raw.config.workflow) {
+      if (typeof step.step !== 'number' || !step.type || !Array.isArray(step.tasks)) {
+        throw new Error('Invalid template JSON: each workflow step must have step, type, and tasks.');
+      }
+    }
     // Assign a new template_id and timestamps on import to avoid conflicts
     const now = new Date().toISOString();
     const template: WorkflowTemplate = {

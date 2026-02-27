@@ -137,13 +137,6 @@ export function AgentCard({
   const updateInstructions = (val: string) =>
     onUpdateTask({ ...task, instructions: val ? [val] : [] });
 
-  const updateConstraint = (idx: number, val: string) => {
-    const constraints = [...task.constraints]; constraints[idx] = val;
-    onUpdateTask({ ...task, constraints });
-  };
-  const addConstraint = () => onUpdateTask({ ...task, constraints: [...task.constraints, ''] });
-  const removeConstraint = (idx: number) => onUpdateTask({ ...task, constraints: task.constraints.filter((_, i) => i !== idx) });
-
   const updateMapping = (idx: number, updated: InputSource) => {
     const mappings = [...task.input_mapping];
     mappings[idx] = updated;
