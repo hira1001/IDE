@@ -141,7 +141,9 @@ export function AgentCard({
     navigator.clipboard.writeText(output).then(() => {
       onToast?.('Output copied to clipboard', 'success');
     }).catch(() => {
-      onToast?.('Copy failed', 'error');
+      // Fallback: delegate to extension host clipboard API
+      postMessage({ type: 'clipboard:write', payload: { text: output } });
+      onToast?.('Output copied to clipboard', 'success');
     });
   };
 

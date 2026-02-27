@@ -146,18 +146,25 @@ export function useWorkflowState() {
 
   const setConfig = useCallback((config: WorkflowConfig) => {
     setState((s) => {
-      // Push current config to undo history before applying new one
-      if (s.config) {
-        const hist = historyRef.current;
-        const idx = historyIndexRef.current;
-        // Discard any redo entries past current index
+      const hist = historyRef.current;
+      const idx = historyIndexRef.current;
+
+      if (idx === -1) {
+        // No history yet. Bootstrap with [prevConfig?, newConfig].
+        const newHist: WorkflowConfig[] = s.config ? [s.config, config] : [config];
+        historyRef.current = newHist;
+        historyIndexRef.current = newHist.length - 1;
+        setHistorySize({ canUndo: newHist.length > 1, canRedo: false });
+      } else {
+        // Normal edit: discard redo future, append new state.
         const newHist = hist.slice(0, idx + 1);
-        newHist.push(s.config);
+        newHist.push(config);
         if (newHist.length > MAX_HISTORY) newHist.shift();
         historyRef.current = newHist;
         historyIndexRef.current = newHist.length - 1;
-        setHistorySize({ canUndo: newHist.length > 0, canRedo: false });
+        setHistorySize({ canUndo: newHist.length > 1, canRedo: false });
       }
+
       return { ...s, config };
     });
   }, []);
@@ -165,32 +172,22 @@ export function useWorkflowState() {
   const undo = useCallback(() => {
     const hist = historyRef.current;
     const idx = historyIndexRef.current;
-    if (idx < 0 || hist.length === 0) return;
-    setState((s) => {
-      // Push current config to a "redo stack" by moving index back
-      const prevConfig = hist[idx];
-      // Move redo future: keep current config as a "redo" entry
-      if (s.config && idx === hist.length - 1) {
-        hist.push(s.config);
-      }
-      historyIndexRef.current = idx - 1;
-      const canUndo = idx - 1 >= 0;
-      const canRedo = true;
-      setHistorySize({ canUndo, canRedo });
-      return { ...s, config: prevConfig };
-    });
+    if (idx <= 0 || hist.length === 0) return;
+    const newIdx = idx - 1;
+    const prevConfig = hist[newIdx];
+    historyIndexRef.current = newIdx;
+    setHistorySize({ canUndo: newIdx > 0, canRedo: true });
+    setState((s) => ({ ...s, config: prevConfig }));
   }, []);
 
   const redo = useCallback(() => {
     const hist = historyRef.current;
     const idx = historyIndexRef.current;
     if (idx >= hist.length - 1) return;
-    const nextIdx = idx + 1;
-    const nextConfig = hist[nextIdx];
-    historyIndexRef.current = nextIdx;
-    const canUndo = true;
-    const canRedo = nextIdx < hist.length - 1;
-    setHistorySize({ canUndo, canRedo });
+    const newIdx = idx + 1;
+    const nextConfig = hist[newIdx];
+    historyIndexRef.current = newIdx;
+    setHistorySize({ canUndo: true, canRedo: newIdx < hist.length - 1 });
     setState((s) => ({ ...s, config: nextConfig }));
   }, []);
 
