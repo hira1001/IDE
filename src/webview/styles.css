@@ -206,11 +206,12 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 3px 0;
-  gap: 0;
+  padding: 2px 0;
 }
-.step-connector__line { width: 2px; height: 12px; background: var(--aao-border); }
-.step-connector__arrow { color: var(--aao-muted); font-size: 11px; opacity: 0.45; }
+.step-connector__svg {
+  color: var(--aao-border);
+  opacity: 0.55;
+}
 
 .btn--add-step {
   margin-top: 14px;

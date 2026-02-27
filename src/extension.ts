@@ -389,6 +389,9 @@ function getWebviewHtml(context: vscode.ExtensionContext, webview: vscode.Webvie
   const scriptUri = webview.asWebviewUri(
     vscode.Uri.joinPath(context.extensionUri, 'dist', 'webview.js')
   );
+  const styleUri = webview.asWebviewUri(
+    vscode.Uri.joinPath(context.extensionUri, 'dist', 'webview.css')
+  );
 
   const nonce = generateNonce();
 
@@ -404,6 +407,7 @@ function getWebviewHtml(context: vscode.ExtensionContext, webview: vscode.Webvie
     font-src ${webview.cspSource};
     img-src ${webview.cspSource} data:;
   " />
+  <link rel="stylesheet" href="${styleUri}" />
   <title>AI Agent Orchestrator</title>
 </head>
 <body>

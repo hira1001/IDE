@@ -80,7 +80,10 @@ export function PipelineView({
           {/* Connector arrow */}
           {idx < config.workflow.length - 1 && (
             <div className="step-connector">
-              <div className="step-connector__arrow">↓</div>
+              <svg className="step-connector__svg" width="16" height="20" viewBox="0 0 16 20" fill="none" aria-hidden="true">
+                <line x1="8" y1="0" x2="8" y2="14" stroke="currentColor" strokeWidth="1.5" strokeDasharray="3 2"/>
+                <path d="M4 11l4 6 4-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+              </svg>
             </div>
           )}
         </React.Fragment>

@@ -63,18 +63,15 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run build",
-    "build": "npm run build:extension && npm run build:webview",
-    "build:extension": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify",
-    "build:webview": "esbuild src/webview/index.tsx --bundle --outfile=dist/webview.js --format=esm --jsx=automatic --minify",
-    "dev": "npm run dev:extension & npm run dev:webview",
-    "dev:extension": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap --watch",
-    "dev:webview": "esbuild src/webview/index.tsx --bundle --outfile=dist/webview.js --format=esm --jsx=automatic --sourcemap --watch",
+    "build": "node esbuild.js",
+    "dev": "node esbuild.js --watch",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:extension": "node ./dist/test/runTest.js",
     "lint": "eslint src --ext ts,tsx",
     "format": "prettier --write 'src/**/*.{ts,tsx,json}'",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.webview.json"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.webview.json",
+    "package": "vsce package --no-dependencies"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.27.0",

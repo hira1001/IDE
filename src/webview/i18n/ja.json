@@ -6,12 +6,15 @@
     "noSource": "アクティブなファイルがありません。入力として使用するファイルをエディタで開いてください。",
     "addStep": "+ ステップを追加",
     "generate": "生成",
+    "generating": "ワークフローを生成中…",
     "preview": "プレビュー",
     "run": "実行",
     "stop": "停止",
     "resume": "続行",
     "saveTemplate": "テンプレートとして保存",
-    "loadTemplate": "テンプレートを読み込む"
+    "loadTemplate": "テンプレートを読み込む",
+    "emptyState": "上のフォームにワークフローの指示を入力してください",
+    "emptyStateSub": "または既存のテンプレートを読み込んでください"
   },
   "step": {
     "parallel": "並列",
@@ -52,7 +55,7 @@
     "title": "ドライラン結果",
     "estimatedTokens": "推定トークン数",
     "estimatedCost": "概算コスト",
-    "providers": "使用プロバイダー",
+    "providers": "プロバイダー",
     "min": "最小",
     "max": "最大",
     "close": "閉じる",
@@ -60,15 +63,16 @@
   },
   "breakpoint": {
     "title": "ステップ完了 — 一時停止中",
-    "description": "以下の出力を確認・編集してから続行してください:",
-    "continue": "▶ 続行",
-    "stop": "⏹ 停止"
+    "description": "以下の出力を確認・編集してから続行してください。",
+    "continue": "続行",
+    "stop": "停止"
   },
   "template": {
-    "title": "テンプレート",
+    "title": "テンプレートを保存",
     "name": "テンプレート名",
     "description": "説明",
-    "tags": "タグ（カンマ区切り）",
+    "descriptionPlaceholder": "このワークフローの概要を記述してください",
+    "tags": "タグ",
     "save": "保存",
     "cancel": "キャンセル",
     "scope": "保存先",
@@ -76,7 +80,8 @@
     "global": "グローバル",
     "noTemplates": "テンプレートはまだありません。",
     "load": "読み込む",
-    "delete": "削除"
+    "delete": "削除",
+    "searchPlaceholder": "テンプレートを検索…"
   },
   "validation": {
     "error": "バリデーションエラー",

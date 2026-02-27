@@ -6,12 +6,15 @@
     "noSource": "No active file. Open a file in the editor to use as input.",
     "addStep": "+ Add Step",
     "generate": "Generate",
+    "generating": "Generating workflow…",
     "preview": "Preview",
     "run": "Run",
     "stop": "Stop",
     "resume": "Resume",
     "saveTemplate": "Save as Template",
-    "loadTemplate": "Load Template"
+    "loadTemplate": "Load Template",
+    "emptyState": "Describe your workflow above to get started",
+    "emptyStateSub": "or load an existing template"
   },
   "step": {
     "parallel": "Parallel",
@@ -52,7 +55,7 @@
     "title": "Dry Run Preview",
     "estimatedTokens": "Estimated tokens",
     "estimatedCost": "Estimated cost",
-    "providers": "Providers used",
+    "providers": "Providers",
     "min": "min",
     "max": "max",
     "close": "Close",
@@ -65,10 +68,11 @@
     "stop": "Stop"
   },
   "template": {
-    "title": "Templates",
+    "title": "Save Template",
     "name": "Template Name",
     "description": "Description",
-    "tags": "Tags (comma-separated)",
+    "descriptionPlaceholder": "What does this workflow do?",
+    "tags": "Tags",
     "save": "Save",
     "cancel": "Cancel",
     "scope": "Save to",
@@ -76,7 +80,8 @@
     "global": "Global",
     "noTemplates": "No templates saved yet.",
     "load": "Load",
-    "delete": "Delete"
+    "delete": "Delete",
+    "searchPlaceholder": "Search templates…"
   },
   "validation": {
     "error": "Validation Error",
