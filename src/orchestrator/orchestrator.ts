@@ -276,10 +276,12 @@ export class Orchestrator {
         this.stateManager.incrementRetry(taskId);
         this.emit();
 
-        // Auto-retry once
-        const retrySystemPrompt = promptBuilder.buildRetryPrompt(response.content, task.output_format);
+        // Auto-retry once — append correction instruction to the original context
+        // so the model retains all input data (source file, previous agent outputs)
+        const retryInstruction = promptBuilder.buildRetryPrompt(response.content, task.output_format);
+        const retryUserPrompt = userPrompt + '\n\n' + retryInstruction;
         response = await this.callWithTimeout(
-          gateway.chat({ model: agent.model, system_prompt: systemPrompt, user_prompt: retrySystemPrompt }),
+          gateway.chat({ model: agent.model, system_prompt: systemPrompt, user_prompt: retryUserPrompt }),
           this.timeout
         );
 

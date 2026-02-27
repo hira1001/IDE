@@ -76,17 +76,44 @@ describe('OutputValidator', () => {
   });
 
   describe('Handover note extraction', () => {
-    it('extracts note after separator', () => {
+    it('extracts note after Japanese separator', () => {
       const content = 'Main output here.\n--- 引き継ぎメモ ---\nNote for next agent.';
       const { mainContent, note } = validator.extractHandoverNote(content);
       expect(mainContent).toBe('Main output here.');
       expect(note).toBe('Note for next agent.');
     });
 
+    it('extracts note after English separator', () => {
+      const content = 'Main output here.\n--- Handover Note ---\nNote for next agent.';
+      const { mainContent, note } = validator.extractHandoverNote(content);
+      expect(mainContent).toBe('Main output here.');
+      expect(note).toBe('Note for next agent.');
+    });
+
+    it('is case-insensitive for English separator', () => {
+      const content = 'Output.\n--- handover note ---\nNote.';
+      const { mainContent, note } = validator.extractHandoverNote(content);
+      expect(mainContent).toBe('Output.');
+      expect(note).toBe('Note.');
+    });
+
+    it('trims whitespace around separator keyword', () => {
+      const content = 'Output.\n---  引き継ぎメモ  ---\nNote.';
+      const { mainContent, note } = validator.extractHandoverNote(content);
+      expect(mainContent).toBe('Output.');
+      expect(note).toBe('Note.');
+    });
+
     it('returns null note if no separator', () => {
       const content = 'Just content, no note.';
       const { mainContent, note } = validator.extractHandoverNote(content);
       expect(mainContent).toBe(content);
+      expect(note).toBeNull();
+    });
+
+    it('returns null note if separator is present but note section is empty', () => {
+      const content = 'Main output.\n--- Handover Note ---\n   ';
+      const { note } = validator.extractHandoverNote(content);
       expect(note).toBeNull();
     });
   });

@@ -107,9 +107,11 @@ export class OutputValidator {
     return { pass: true };
   }
 
-  /** Extract handover note from output, returning { mainContent, note }. */
+  /** Extract handover note from output, returning { mainContent, note }.
+   *  Supports Japanese (--- 引き継ぎメモ ---) and English (--- Handover Note ---) separators.
+   */
   extractHandoverNote(content: string): { mainContent: string; note: string | null } {
-    const separator = /^---\s*引き継ぎメモ\s*---$/m;
+    const separator = /^---\s*(?:引き継ぎメモ|Handover Note)\s*---$/im;
     const match = content.match(separator);
     if (!match || match.index === undefined) {
       return { mainContent: content, note: null };
