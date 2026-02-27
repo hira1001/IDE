@@ -212,6 +212,12 @@ export function AgentCard({
         <div className="agent-card__info">
           <div className="agent-card__name">{agent.name}</div>
           <div className="agent-card__task">{task.task_name}</div>
+          {!expanded && instructionText && (
+            <div className="agent-card__hint">
+              {(instructionText.split('\n').find((l) => l.trim())?.replace(/^#+\s*/, '') ?? '').slice(0, 72)}
+              {instructionText.length > 72 ? '…' : ''}
+            </div>
+          )}
         </div>
 
         <div className="agent-card__model">{agent.model}</div>
@@ -430,17 +436,21 @@ export function AgentCard({
               </div>
             </div>
 
-            {/* Model */}
+            {/* Model — combobox: select from presets or type a custom name */}
             <div className="field-group">
               <label className="field-label">{t('card.model')}</label>
-              <select className="field-select" value={agent.model}
-                onChange={(e) => onUpdateAgent({ ...agent, model: e.target.value as LLMModel })}>
-                {LLM_MODEL_GROUPS.map((group) => (
-                  <optgroup key={group.label} label={group.label}>
-                    {group.models.map((m) => <option key={m} value={m}>{m}</option>)}
-                  </optgroup>
-                ))}
-              </select>
+              <input
+                className="field-input"
+                list={`model-list-${task.task_id}`}
+                value={agent.model}
+                onChange={(e) => onUpdateAgent({ ...agent, model: e.target.value })}
+                placeholder="Select or type a model (e.g. ollama:phi3, ollama:llama3.3)"
+              />
+              <datalist id={`model-list-${task.task_id}`}>
+                {LLM_MODEL_GROUPS.flatMap((group) =>
+                  group.models.map((m) => <option key={m} value={m}>{group.label} — {m}</option>)
+                )}
+              </datalist>
             </div>
 
             {/* Handover toggle */}

@@ -312,6 +312,73 @@ describe('TemplateManager', () => {
     });
   });
 
+  // ─── importFromJson() ─────────────────────────────────────────────────────
+
+  describe('importFromJson()', () => {
+    const validJson = JSON.stringify({
+      schema_version: '1.0',
+      name: 'Test Template',
+      description: '',
+      tags: [],
+      config: MINIMAL_CONFIG,
+    });
+
+    it('imports a valid template and assigns a new template_id', async () => {
+      const result = await manager.importFromJson(validJson);
+      expect(result.name).toBe('Test Template');
+      expect(result.template_id).toBeTruthy();
+      expect(Array.isArray(result.config.agents)).toBe(true);
+    });
+
+    it('throws when schema_version is missing', async () => {
+      const bad = JSON.stringify({ config: MINIMAL_CONFIG });
+      await expect(manager.importFromJson(bad)).rejects.toThrow(/missing schema_version or config/);
+    });
+
+    it('throws when config is missing', async () => {
+      const bad = JSON.stringify({ schema_version: '1.0' });
+      await expect(manager.importFromJson(bad)).rejects.toThrow(/missing schema_version or config/);
+    });
+
+    it('throws when config.agents is empty', async () => {
+      const bad = JSON.stringify({
+        schema_version: '1.0',
+        config: { agents: [], workflow: [{ step: 1, type: 'parallel', pause_after: false, tasks: [] }] },
+      });
+      await expect(manager.importFromJson(bad)).rejects.toThrow(/agents must be a non-empty array/);
+    });
+
+    it('throws when config.workflow is empty', async () => {
+      const bad = JSON.stringify({
+        schema_version: '1.0',
+        config: { agents: MINIMAL_CONFIG.agents, workflow: [] },
+      });
+      await expect(manager.importFromJson(bad)).rejects.toThrow(/workflow must be a non-empty array/);
+    });
+
+    it('throws when an agent is missing required fields', async () => {
+      const bad = JSON.stringify({
+        schema_version: '1.0',
+        config: {
+          agents: [{ id: 'a1', name: 'Agent' }], // missing model
+          workflow: MINIMAL_CONFIG.workflow,
+        },
+      });
+      await expect(manager.importFromJson(bad)).rejects.toThrow(/id, name, and model/);
+    });
+
+    it('throws when a workflow step is missing required fields', async () => {
+      const bad = JSON.stringify({
+        schema_version: '1.0',
+        config: {
+          agents: MINIMAL_CONFIG.agents,
+          workflow: [{ step: 1 }], // missing type and tasks
+        },
+      });
+      await expect(manager.importFromJson(bad)).rejects.toThrow(/step, type, and tasks/);
+    });
+  });
+
   // ─── delete() ─────────────────────────────────────────────────────────────
 
   describe('delete()', () => {
