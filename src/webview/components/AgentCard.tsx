@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Agent, Task, TaskState, OutputFormat, LLMModel } from '../../types/index.js';
+import { Agent, Task, TaskState, OutputFormat, LLMModel, WorkflowConfig, InputSource } from '../../types/index.js';
 
 const LLM_MODELS: LLMModel[] = [
   'gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo',
@@ -24,6 +24,7 @@ interface AgentCardProps {
   task: Task;
   taskState?: TaskState;
   output?: string;
+  config?: WorkflowConfig;
   onUpdateAgent: (agent: Agent) => void;
   onUpdateTask: (task: Task) => void;
   onRetry: () => void;
@@ -31,7 +32,7 @@ interface AgentCardProps {
 }
 
 export function AgentCard({
-  agent, task, taskState, output,
+  agent, task, taskState, output, config,
   onUpdateAgent, onUpdateTask, onRetry, onDelete,
 }: AgentCardProps) {
   const { t } = useTranslation();
@@ -70,6 +71,37 @@ export function AgentCard({
   };
   const addConstraint = () => onUpdateTask({ ...task, constraints: [...task.constraints, ''] });
   const removeConstraint = (idx: number) => onUpdateTask({ ...task, constraints: task.constraints.filter((_, i) => i !== idx) });
+
+  const updateMapping = (idx: number, updated: InputSource) => {
+    const mappings = [...task.input_mapping];
+    mappings[idx] = updated;
+    onUpdateTask({ ...task, input_mapping: mappings });
+  };
+  const addMapping = () => {
+    const newMapping: InputSource = { from_step: 0, from_agent_id: '__source__', label: 'Source file' };
+    onUpdateTask({ ...task, input_mapping: [...task.input_mapping, newMapping] });
+  };
+  const removeMapping = (idx: number) =>
+    onUpdateTask({ ...task, input_mapping: task.input_mapping.filter((_, i) => i !== idx) });
+
+  // Build available output sources from config (all other tasks)
+  const availableSources: Array<{ value: string; label: string; from_step: number; from_agent_id: string }> = [
+    { value: '__source__', label: 'Source File', from_step: 0, from_agent_id: '__source__' },
+  ];
+  if (config) {
+    for (const step of config.workflow) {
+      for (const t of step.tasks) {
+        if (t.task_id === task.task_id) continue;
+        const a = config.agents.find((ag) => ag.id === t.agent_id);
+        availableSources.push({
+          value: t.agent_id,
+          label: `${a?.name ?? t.agent_id} → ${t.output_key}`,
+          from_step: step.step,
+          from_agent_id: t.agent_id,
+        });
+      }
+    }
+  }
 
   const initial = agent.name ? agent.name[0].toUpperCase() : '?';
 
@@ -173,6 +205,47 @@ export function AgentCard({
                 </div>
               ))}
               <button className="btn-link" onClick={addConstraint}>＋ {t('card.addConstraint')}</button>
+            </div>
+
+            {/* Input Mapping */}
+            <div className="field-group">
+              <label className="field-label">{t('card.inputMapping', 'Input Sources')}</label>
+              {task.input_mapping.map((mapping, idx) => (
+                <div key={idx} className="input-mapping-row">
+                  <select
+                    className="field-input input-mapping-row__source"
+                    value={mapping.from_agent_id}
+                    onChange={(e) => {
+                      const src = availableSources.find((s) => s.value === e.target.value);
+                      if (src) {
+                        updateMapping(idx, {
+                          ...mapping,
+                          from_agent_id: src.from_agent_id,
+                          from_step: src.from_step,
+                        });
+                      }
+                    }}
+                  >
+                    {availableSources.map((src) => (
+                      <option key={src.value} value={src.value}>{src.label}</option>
+                    ))}
+                  </select>
+                  <input
+                    className="field-input input-mapping-row__label"
+                    placeholder="label"
+                    value={mapping.label}
+                    onChange={(e) => updateMapping(idx, { ...mapping, label: e.target.value })}
+                  />
+                  <button
+                    className="card-mini-btn card-mini-btn--danger"
+                    onClick={() => removeMapping(idx)}
+                    title="Remove"
+                  >✕</button>
+                </div>
+              ))}
+              <button className="btn-link" onClick={addMapping}>
+                ＋ {t('card.addInput', 'Add input source')}
+              </button>
             </div>
 
             {/* Output Key + Format (2-col) */}

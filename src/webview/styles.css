@@ -349,6 +349,49 @@ body {
   gap: 4px;
 }
 
+/* ─── Conditional Step Config ─────────────────────────────────────────────── */
+.step-block__cond-config {
+  margin: 0 14px 10px;
+  padding: 12px 14px;
+  background: rgba(234,179,8,0.06);
+  border: 1px solid rgba(234,179,8,0.2);
+  border-radius: 8px;
+}
+.cond-config__title {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--aao-amber, #f59e0b);
+  margin-bottom: 10px;
+}
+.cond-config__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+}
+.cond-config__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.cond-config__label {
+  font-size: 10px;
+  color: var(--aao-fg-muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.cond-config__select { width: 100%; }
+.cond-config__number { width: 80px; }
+.cond-keyword {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+.cond-keyword--pass { color: #22c55e; }
+.cond-keyword--fail { color: #ef4444; }
+
 .btn-add-card {
   background: none;
   border: 1.5px dashed var(--aao-border);
@@ -673,6 +716,24 @@ body {
 .field-textarea { resize: vertical; line-height: 1.5; }
 .field-textarea--mono { font-family: var(--aao-font-mono); font-size: 11px; }
 .field-input--grow { flex: 1; }
+
+/* ─── Input Mapping Editor ───────────────────────────────────────────────────── */
+.input-mapping-row {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.input-mapping-row__source {
+  flex: 2;
+  min-width: 0;
+  font-size: 11px;
+}
+.input-mapping-row__label {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+}
 
 .field-row { display: flex; gap: 6px; align-items: center; }
 

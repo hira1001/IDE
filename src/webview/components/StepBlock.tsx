@@ -78,18 +78,24 @@ export function StepBlock({
         <select
           className="step-block__type-select"
           value={step.type}
-          onChange={(e) => onUpdateStep({ ...step, type: e.target.value as WorkflowStep['type'] })}
+          onChange={(e) => {
+            const newType = e.target.value as WorkflowStep['type'];
+            const updates: Partial<WorkflowStep> = { type: newType };
+            if (newType === 'conditional' && !step.condition) {
+              updates.condition = {
+                evaluator_agent_id: step.tasks[0]?.agent_id ?? '',
+                pass_keyword: 'PASS',
+                fail_keyword: 'FAIL',
+                max_loops: 3,
+              };
+            }
+            onUpdateStep({ ...step, ...updates });
+          }}
         >
           <option value="parallel">Parallel</option>
           <option value="sequential">Sequential</option>
           <option value="conditional">Conditional</option>
         </select>
-
-        {step.type === 'conditional' && step.condition && (
-          <span className="step-block__cond-badge">
-            ✓ {step.condition.pass_keyword} / ✗→Step{step.on_fail_goto ?? '?'}
-          </span>
-        )}
 
         <label className={`step-block__pause-toggle ${pauseActive ? 'step-block__pause-toggle--active' : ''}`}>
           <input
@@ -106,6 +112,118 @@ export function StepBlock({
         </button>
       </div>
 
+      {/* Conditional configuration */}
+      {step.type === 'conditional' && (
+        <div className="step-block__cond-config">
+          <div className="cond-config__title">{t('step.conditionalConfig', 'Conditional Configuration')}</div>
+          <div className="cond-config__grid">
+            <label className="cond-config__field">
+              <span className="cond-config__label">{t('step.evaluatorAgent', 'Evaluator Agent')}</span>
+              <select
+                className="field-input cond-config__select"
+                value={step.condition?.evaluator_agent_id ?? ''}
+                onChange={(e) =>
+                  onUpdateStep({
+                    ...step,
+                    condition: { ...step.condition!, evaluator_agent_id: e.target.value },
+                  })
+                }
+              >
+                <option value="">{t('step.selectAgent', '— select agent —')}</option>
+                {config.agents.map((a) => (
+                  <option key={a.id} value={a.id}>{a.name}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="cond-config__field">
+              <span className="cond-config__label">
+                <span className="cond-keyword cond-keyword--pass">✓</span>
+                {t('step.passKeyword', 'Pass Keyword')}
+              </span>
+              <input
+                className="field-input"
+                type="text"
+                value={step.condition?.pass_keyword ?? ''}
+                placeholder="PASS"
+                onChange={(e) =>
+                  onUpdateStep({
+                    ...step,
+                    condition: { ...step.condition!, pass_keyword: e.target.value },
+                  })
+                }
+              />
+            </label>
+
+            <label className="cond-config__field">
+              <span className="cond-config__label">
+                <span className="cond-keyword cond-keyword--fail">✗</span>
+                {t('step.failKeyword', 'Fail Keyword')}
+              </span>
+              <input
+                className="field-input"
+                type="text"
+                value={step.condition?.fail_keyword ?? ''}
+                placeholder="FAIL"
+                onChange={(e) =>
+                  onUpdateStep({
+                    ...step,
+                    condition: { ...step.condition!, fail_keyword: e.target.value },
+                  })
+                }
+              />
+            </label>
+
+            <label className="cond-config__field">
+              <span className="cond-config__label">{t('step.maxLoops', 'Max Loops')}</span>
+              <input
+                className="field-input cond-config__number"
+                type="number"
+                min={1}
+                max={10}
+                value={step.condition?.max_loops ?? 3}
+                onChange={(e) =>
+                  onUpdateStep({
+                    ...step,
+                    condition: { ...step.condition!, max_loops: parseInt(e.target.value, 10) || 1 },
+                  })
+                }
+              />
+            </label>
+
+            <label className="cond-config__field">
+              <span className="cond-config__label">{t('step.onFailGoto', 'On Fail → Step')}</span>
+              <input
+                className="field-input cond-config__number"
+                type="number"
+                min={1}
+                value={step.on_fail_goto ?? ''}
+                placeholder="—"
+                onChange={(e) => {
+                  const v = parseInt(e.target.value, 10);
+                  onUpdateStep({ ...step, on_fail_goto: isNaN(v) ? undefined : v });
+                }}
+              />
+            </label>
+
+            <label className="cond-config__field">
+              <span className="cond-config__label">{t('step.thenGoto', 'On Pass → Step')}</span>
+              <input
+                className="field-input cond-config__number"
+                type="number"
+                min={1}
+                value={step.then_goto ?? ''}
+                placeholder="—"
+                onChange={(e) => {
+                  const v = parseInt(e.target.value, 10);
+                  onUpdateStep({ ...step, then_goto: isNaN(v) ? undefined : v });
+                }}
+              />
+            </label>
+          </div>
+        </div>
+      )}
+
       {/* Cards */}
       <div className={`step-block__cards ${isParallel ? 'step-block__cards--parallel' : ''}`}>
         {step.tasks.map((task) => {
@@ -118,6 +236,7 @@ export function StepBlock({
               task={task}
               taskState={taskStates[task.task_id]}
               output={outputStore[task.output_key]}
+              config={config}
               onUpdateAgent={(a) => updateAgent(agent.id, a)}
               onUpdateTask={(t) => updateTask(task.task_id, t)}
               onRetry={() => onRetryTask(task.task_id)}
@@ -129,12 +248,6 @@ export function StepBlock({
         <button className="btn-add-card" onClick={addTask}>＋ {t('step.addCard')}</button>
       </div>
 
-      {/* Loop goto hint */}
-      {step.then_goto !== undefined && (
-        <div className="step-block__goto-hint">
-          ↩️ On pass → Step {step.then_goto}
-        </div>
-      )}
     </div>
   );
 }
