@@ -22,7 +22,15 @@
     "conditional": "条件分岐",
     "pauseAfter": "完了後に一時停止",
     "deleteStep": "ステップを削除",
-    "addCard": "+ エージェントを追加"
+    "addCard": "+ エージェントを追加",
+    "conditionalConfig": "条件分岐の設定",
+    "evaluatorAgent": "評価エージェント",
+    "selectAgent": "— エージェントを選択 —",
+    "passKeyword": "合格キーワード",
+    "failKeyword": "不合格キーワード",
+    "maxLoops": "最大ループ回数",
+    "onFailGoto": "不合格時 → ステップ",
+    "thenGoto": "合格時 → ステップ"
   },
   "card": {
     "name": "エージェント名",
@@ -31,7 +39,8 @@
     "addInstruction": "+ 手順を追加",
     "constraints": "制約条件",
     "addConstraint": "+ 制約を追加",
-    "inputMapping": "入力マッピング",
+    "inputMapping": "入力ソース",
+    "addInput": "入力ソースを追加",
     "outputKey": "出力キー",
     "outputFormat": "出力形式",
     "model": "使用モデル",

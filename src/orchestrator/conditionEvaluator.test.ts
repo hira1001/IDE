@@ -35,4 +35,34 @@ describe('ConditionEvaluator', () => {
     const output = 'The review is complete. Everything is fine.';
     expect(evaluator.evaluate(output, config)).toBe('fail');
   });
+
+  it('returns fail for empty output', () => {
+    expect(evaluator.evaluate('', config)).toBe('fail');
+  });
+
+  it('pass keyword takes precedence when both appear on first line', () => {
+    // pass_keyword is checked first on the first line → returns 'pass'
+    const output = 'APPROVED REVISION_NEEDED something';
+    expect(evaluator.evaluate(output, config)).toBe('pass');
+  });
+
+  it('is case-sensitive for keywords', () => {
+    const output = 'approved — looks good to me.';
+    expect(evaluator.evaluate(output, config)).toBe('fail');
+  });
+
+  it('returns pass when keyword is embedded mid-line', () => {
+    const output = 'Result: APPROVED after careful review.';
+    expect(evaluator.evaluate(output, config)).toBe('pass');
+  });
+
+  it('returns fail when fail keyword is embedded mid-line', () => {
+    const output = 'Result: REVISION_NEEDED — see issues.';
+    expect(evaluator.evaluate(output, config)).toBe('fail');
+  });
+
+  it('matches pass keyword with surrounding whitespace on first line', () => {
+    const output = '  APPROVED  \nsome extra text';
+    expect(evaluator.evaluate(output, config)).toBe('pass');
+  });
 });

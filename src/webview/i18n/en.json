@@ -22,7 +22,15 @@
     "conditional": "Conditional",
     "pauseAfter": "Pause after step",
     "deleteStep": "Delete step",
-    "addCard": "+ Add Agent"
+    "addCard": "+ Add Agent",
+    "conditionalConfig": "Conditional Configuration",
+    "evaluatorAgent": "Evaluator Agent",
+    "selectAgent": "— select agent —",
+    "passKeyword": "Pass Keyword",
+    "failKeyword": "Fail Keyword",
+    "maxLoops": "Max Loops",
+    "onFailGoto": "On Fail → Step",
+    "thenGoto": "On Pass → Step"
   },
   "card": {
     "name": "Agent Name",
@@ -31,7 +39,8 @@
     "addInstruction": "+ Add instruction",
     "constraints": "Constraints",
     "addConstraint": "+ Add constraint",
-    "inputMapping": "Input Mapping",
+    "inputMapping": "Input Sources",
+    "addInput": "Add input source",
     "outputKey": "Output Key",
     "outputFormat": "Output Format",
     "model": "Model",
