@@ -20,6 +20,8 @@ interface WorkflowState {
   dryRunResult: DryRunResult | null;
   isGenerating: boolean;
   generationError: string | null;
+  /** Live streaming text per task_id. Cleared when task reaches 'completed'. */
+  streamingChunks: Record<string, string>;
 }
 
 const INITIAL_STATE: WorkflowState = {
@@ -31,6 +33,7 @@ const INITIAL_STATE: WorkflowState = {
   dryRunResult: null,
   isGenerating: false,
   generationError: null,
+  streamingChunks: {},
 };
 
 export function useWorkflowState() {
@@ -73,7 +76,30 @@ export function useWorkflowState() {
 
         case 'status:update': {
           const p = message.payload as { execution_state: SerializedExecutionState };
-          setState((s) => ({ ...s, executionState: p.execution_state }));
+          setState((s) => {
+            // Clear streaming chunks for any tasks that are now completed/error
+            const completed = Object.entries(p.execution_state.task_states)
+              .filter(([, ts]) => ts.status === 'completed' || ts.status === 'error' || ts.status === 'aborted')
+              .map(([id]) => id);
+            if (completed.length > 0) {
+              const updatedChunks = { ...s.streamingChunks };
+              for (const id of completed) delete updatedChunks[id];
+              return { ...s, executionState: p.execution_state, streamingChunks: updatedChunks };
+            }
+            return { ...s, executionState: p.execution_state };
+          });
+          break;
+        }
+
+        case 'task:stream_chunk': {
+          const p = message.payload as { task_id: string; chunk: string };
+          setState((s) => ({
+            ...s,
+            streamingChunks: {
+              ...s.streamingChunks,
+              [p.task_id]: (s.streamingChunks[p.task_id] ?? '') + p.chunk,
+            },
+          }));
           break;
         }
 
@@ -245,5 +271,6 @@ export function useWorkflowState() {
     redo,
     canUndo: historySize.canUndo,
     canRedo: historySize.canRedo,
+    streamingChunks: state.streamingChunks,
   };
 }

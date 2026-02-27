@@ -10,9 +10,10 @@ export class GoogleAIAdapter implements LLMGateway {
     this.abortController = new AbortController();
     const start = Date.now();
 
-    // Map model name: "gemini-1.5-pro" → "gemini-1.5-pro-latest"
     const modelId = request.model;
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${this.apiKey}`;
+    // Use streamGenerateContent endpoint when streaming is requested
+    const endpoint = request.onChunk ? 'streamGenerateContent?alt=sse&' : 'generateContent?';
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:${endpoint}key=${this.apiKey}`;
 
     const body = {
       systemInstruction: { parts: [{ text: request.system_prompt }] },
@@ -35,6 +36,10 @@ export class GoogleAIAdapter implements LLMGateway {
       throw new Error(`Google AI API error ${response.status}: ${err}`);
     }
 
+    if (request.onChunk && response.body) {
+      return this._readStream(response, request.onChunk, start, request.model);
+    }
+
     const data = await response.json() as {
       candidates: Array<{ content: { parts: Array<{ text: string }> } }>;
       usageMetadata?: { promptTokenCount: number; candidatesTokenCount: number };
@@ -49,6 +54,65 @@ export class GoogleAIAdapter implements LLMGateway {
       input_tokens: inputTokens,
       output_tokens: outputTokens,
       model: request.model,
+      duration_ms: Date.now() - start,
+    };
+  }
+
+  private async _readStream(
+    response: Response,
+    onChunk: (chunk: string) => void,
+    start: number,
+    model: string
+  ): Promise<LLMResponse> {
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let fullContent = '';
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const data = line.slice(6).trim();
+          if (!data) continue;
+
+          try {
+            const event = JSON.parse(data) as {
+              candidates?: Array<{ content: { parts: Array<{ text: string }> } }>;
+              usageMetadata?: { promptTokenCount: number; candidatesTokenCount: number };
+            };
+            const chunk = event.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (chunk) {
+              fullContent += chunk;
+              onChunk(chunk);
+            }
+            if (event.usageMetadata) {
+              inputTokens = event.usageMetadata.promptTokenCount;
+              outputTokens = event.usageMetadata.candidatesTokenCount;
+            }
+          } catch {
+            // Skip malformed SSE lines
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    return {
+      content: fullContent,
+      input_tokens: inputTokens || estimateTokens(fullContent),
+      output_tokens: outputTokens || estimateTokens(fullContent),
+      model,
       duration_ms: Date.now() - start,
     };
   }

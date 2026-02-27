@@ -10,6 +10,8 @@ interface StepBlockProps {
   config: WorkflowConfig;
   taskStates: Record<string, TaskState>;
   outputStore: Record<string, string>;
+  /** Live streaming chunks per task_id. */
+  streamingChunks?: Record<string, string>;
   onUpdateStep: (step: WorkflowStep) => void;
   onDeleteStep: () => void;
   onRetryTask: (taskId: string) => void;
@@ -21,7 +23,7 @@ const STEP_TYPE_LABELS: Record<WorkflowStep['type'], string> = {
 };
 
 export function StepBlock({
-  step, stepIndex, config, taskStates, outputStore,
+  step, stepIndex, config, taskStates, outputStore, streamingChunks,
   onUpdateStep, onDeleteStep, onRetryTask, onToast,
 }: StepBlockProps) {
   const { t } = useTranslation();
@@ -260,6 +262,7 @@ export function StepBlock({
               task={task}
               taskState={taskStates[task.task_id]}
               output={outputStore[task.output_key]}
+              streamingOutput={streamingChunks?.[task.task_id]}
               config={config}
               onUpdateAgent={(a) => updateAgent(agent.id, a)}
               onUpdateTask={(t) => updateTask(task.task_id, t)}

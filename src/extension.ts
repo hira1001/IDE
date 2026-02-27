@@ -479,6 +479,9 @@ async function handleExecuteWorkflow(
     onPause: async (stepIndex, outputs) => {
       postMessage({ type: 'workflow:pause_resume', payload: { paused: true, stepIndex, outputs } });
     },
+    onStreamChunk: (taskId: string, chunk: string) => {
+      postMessage({ type: 'task:stream_chunk', payload: { task_id: taskId, chunk } });
+    },
   });
 
   postMessage({ type: 'workflow:execute', payload: { status: 'started' } });

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useWorkflowState } from './hooks/useWorkflowState.js';
 import { PipelineView } from './components/PipelineView.js';
@@ -120,6 +120,7 @@ export function App() {
     dryRunResult,
     isGenerating,
     generationError,
+    streamingChunks,
     generateWorkflow,
     executeWorkflow,
     executeFromStep,
@@ -140,6 +141,16 @@ export function App() {
   } = useWorkflowState();
 
   const [instruction, setInstruction] = useState('');
+  const chatInputRef = useRef<HTMLTextAreaElement>(null);
+  // Auto-resize chat input
+  useEffect(() => {
+    const el = chatInputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    const lineHeight = parseFloat(getComputedStyle(el).lineHeight) || 18;
+    el.style.height = `${Math.max(el.scrollHeight, lineHeight * 2 + 20)}px`;
+  }, [instruction]);
+
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [showTemplateSelector, setShowTemplateSelector] = useState(false);
   const [pausedOutputs, setPausedOutputs] = useState<Record<string, string> | null>(null);
@@ -149,6 +160,12 @@ export function App() {
   const taskStates = executionState?.task_states ?? {};
   const outputStore = executionState?.output_store ?? {};
   const totalCost = executionState?.total_cost_usd ?? 0;
+
+  // Compute completed task counts for progress bar
+  const totalTasks = config ? config.workflow.reduce((acc, s) => acc + s.tasks.length, 0) : 0;
+  const completedTasks = Object.values(taskStates).filter(
+    (ts) => ts.status === 'completed' || ts.status === 'skipped'
+  ).length;
 
   const addToast = useCallback((message: string, type: ToastItem['type']) => {
     const id = uuidv4();
@@ -324,6 +341,7 @@ export function App() {
       <div className="app__chat">
         <div className="chat-input-wrapper">
           <textarea
+            ref={chatInputRef}
             className="chat-input"
             placeholder={t('app.chatPlaceholder')}
             value={instruction}
@@ -332,20 +350,35 @@ export function App() {
             rows={2}
             disabled={isGenerating}
           />
-          <button
-            className={`chat-send-btn${isGenerating ? ' chat-send-btn--loading' : ''}`}
-            onClick={handleGenerate}
-            disabled={isGenerating || !instruction.trim()}
-            aria-label={t('app.generate')}
-          >
-            {isGenerating ? (
-              <span className="chat-send-btn__spinner" />
-            ) : (
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <path d="M14 8L2 2l3 6-3 6 12-6z" fill="currentColor"/>
+          <div className="chat-send-group">
+            <button
+              className={`chat-send-btn${isGenerating ? ' chat-send-btn--loading' : ''}`}
+              onClick={handleGenerate}
+              disabled={isGenerating || !instruction.trim()}
+              aria-label={t('app.generate')}
+              title={`${t('app.generate')} (Ctrl+Enter)`}
+            >
+              {isGenerating ? (
+                <span className="chat-send-btn__spinner" />
+              ) : (
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="M14 8L2 2l3 6-3 6 12-6z" fill="currentColor"/>
+                </svg>
+              )}
+            </button>
+            <button
+              className="chat-run-btn"
+              onClick={handleGenerateAndRun}
+              disabled={isGenerating || !instruction.trim()}
+              aria-label={t('app.generateAndRun') || 'Generate & Run'}
+              title={`${t('app.generateAndRun') || 'Generate & Run'} (Ctrl+Shift+Enter)`}
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                <path d="M2.5 2l10 5-10 5V2z" fill="currentColor"/>
               </svg>
-            )}
-          </button>
+              <span className="chat-run-btn__label">{t('app.generateAndRun') || 'Generate & Run'}</span>
+            </button>
+          </div>
         </div>
         <div className="chat-input-hint">
           <kbd>Ctrl</kbd>+<kbd>Enter</kbd> {t('app.generate') || 'Generate'}
@@ -397,6 +430,7 @@ export function App() {
           config={config}
           taskStates={taskStates}
           outputStore={outputStore}
+          streamingChunks={streamingChunks}
           onChange={setConfig}
           onRetryTask={(taskId) => retryTask(taskId, config)}
           onToast={addToast}
@@ -429,6 +463,8 @@ export function App() {
           totalCost={totalCost}
           currentStep={executionState?.current_step}
           totalSteps={config.workflow.length}
+          completedTasks={completedTasks}
+          totalTasks={totalTasks}
           onPreview={handlePreview}
           onRun={handleRun}
           onStop={abortWorkflow}

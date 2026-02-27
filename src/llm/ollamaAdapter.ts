@@ -28,7 +28,7 @@ export class OllamaAdapter implements LLMGateway {
       ],
       max_tokens: request.max_tokens ?? 4096,
       temperature: request.temperature ?? 0.7,
-      stream: false,
+      stream: !!request.onChunk,
     };
 
     const url = `${this.endpointBase.replace(/\/$/, '')}/v1/chat/completions`;
@@ -57,6 +57,10 @@ export class OllamaAdapter implements LLMGateway {
       throw new Error(`Ollama API error ${response.status}: ${err}`);
     }
 
+    if (request.onChunk && response.body) {
+      return this._readStream(response, request.onChunk, start, modelName);
+    }
+
     const data = await response.json() as {
       choices: Array<{ message: { content: string } }>;
       usage?: { prompt_tokens: number; completion_tokens: number };
@@ -68,6 +72,58 @@ export class OllamaAdapter implements LLMGateway {
       input_tokens: data.usage?.prompt_tokens ?? 0,
       output_tokens: data.usage?.completion_tokens ?? 0,
       model: `ollama:${data.model ?? modelName}`,
+      duration_ms: Date.now() - start,
+    };
+  }
+
+  private async _readStream(
+    response: Response,
+    onChunk: (chunk: string) => void,
+    start: number,
+    modelName: string
+  ): Promise<LLMResponse> {
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let fullContent = '';
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const data = line.slice(6).trim();
+          if (data === '[DONE]' || !data) continue;
+
+          try {
+            const event = JSON.parse(data) as {
+              choices: Array<{ delta?: { content?: string } }>;
+            };
+            const chunk = event.choices?.[0]?.delta?.content;
+            if (chunk) {
+              fullContent += chunk;
+              onChunk(chunk);
+            }
+          } catch {
+            // Skip malformed SSE lines
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    return {
+      content: fullContent,
+      input_tokens: estimateTokens(fullContent),
+      output_tokens: estimateTokens(fullContent),
+      model: `ollama:${modelName}`,
       duration_ms: Date.now() - start,
     };
   }

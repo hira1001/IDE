@@ -103,7 +103,7 @@ body {
 
 .chat-input {
   width: 100%;
-  padding: 10px 14px;
+  padding: 10px 14px 36px;
   background: var(--aao-surface-2);
   color: var(--aao-text);
   border: 1px solid var(--aao-border);
@@ -112,7 +112,10 @@ body {
   font-family: inherit;
   font-size: 13px;
   line-height: 1.5;
+  overflow: hidden;
   transition: border-color var(--t), box-shadow var(--t);
+  max-height: 200px;
+  overflow-y: auto;
 }
 .chat-input:focus {
   outline: none;
@@ -1145,17 +1148,13 @@ body {
 
 /* ─── Chat Input Wrapper ─────────────────────────────────────────────────────── */
 .chat-input-wrapper {
-  display: flex;
-  gap: 8px;
-  align-items: flex-start;
   position: relative;
 }
-.chat-input-wrapper .chat-input { padding-bottom: 22px; }
 
 .chat-send-btn {
   flex-shrink: 0;
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border-radius: var(--aao-r-sm);
   border: none;
   cursor: pointer;
@@ -1166,7 +1165,6 @@ body {
   justify-content: center;
   transition: all var(--t);
   box-shadow: 0 1px 4px rgba(0,0,0,0.3);
-  align-self: flex-end;
 }
 .chat-send-btn:not(:disabled):hover { background: var(--aao-accent-hover); box-shadow: 0 2px 10px rgba(14,165,233,0.35); }
 .chat-send-btn:disabled { opacity: 0.35; cursor: not-allowed; }
@@ -1709,6 +1707,208 @@ body {
   gap: 4px;
   margin-left: auto;
 }
+
+/* ─── Auto-resize textarea ──────────────────────────────────────────────────── */
+.field-textarea--autoresize {
+  resize: none;
+  overflow: hidden;
+  min-height: 60px;
+}
+
+/* ─── Progress bar (above ExecutionBar) ─────────────────────────────────────── */
+.execution-bar__progress-track {
+  position: fixed;
+  bottom: 47px; /* sits just above the execution bar */
+  left: 0; right: 0;
+  height: 3px;
+  background: var(--aao-border);
+  z-index: 101;
+  overflow: hidden;
+}
+.execution-bar__progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--aao-blue), var(--aao-accent));
+  transition: width 0.4s ease;
+  position: relative;
+}
+.execution-bar__progress-fill::after {
+  content: '';
+  position: absolute;
+  top: 0; right: 0;
+  width: 60px;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4));
+  animation: shimmer 1.5s infinite;
+}
+
+.execution-bar__pct {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--aao-blue);
+  font-family: var(--aao-font-mono);
+  letter-spacing: 0.04em;
+}
+
+@keyframes shimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+
+/* ─── Chat input: Generate & Run button ─────────────────────────────────────── */
+.chat-send-group {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.chat-run-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  background: rgba(14,165,233,0.1);
+  color: var(--aao-blue);
+  border: 1px solid rgba(14,165,233,0.25);
+  border-radius: var(--aao-r-sm);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: all var(--t);
+}
+.chat-run-btn:hover:not(:disabled) {
+  background: rgba(14,165,233,0.18);
+  border-color: rgba(14,165,233,0.45);
+}
+.chat-run-btn:disabled { opacity: 0.38; cursor: not-allowed; }
+.chat-run-btn__label { display: none; }
+@media (min-width: 360px) {
+  .chat-run-btn__label { display: inline; }
+}
+
+/* ─── Streaming output section ──────────────────────────────────────────────── */
+.agent-card__streaming-section {
+  border-top: 1px solid rgba(59,130,246,0.2);
+  padding: 9px 14px;
+  background: rgba(59,130,246,0.04);
+}
+
+.agent-card__output-title--streaming {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--aao-blue);
+}
+
+.agent-card__stream-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--aao-blue);
+  animation: stream-pulse 1s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes stream-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.7); }
+}
+
+.agent-card__output-preview--streaming {
+  max-height: 160px;
+  overflow-y: auto;
+  color: var(--aao-text);
+  opacity: 0.9;
+  border-color: rgba(59,130,246,0.2);
+  background: rgba(59,130,246,0.04);
+}
+
+/* Blinking cursor at end of streaming text */
+.agent-card__output-preview--streaming::after {
+  content: '▋';
+  display: inline;
+  animation: blink-cursor 0.8s step-end infinite;
+  color: var(--aao-blue);
+  font-size: 11px;
+}
+
+@keyframes blink-cursor {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* ─── Fullscreen instruction modal ──────────────────────────────────────────── */
+.instruction-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(4px);
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: fade-in 0.15s ease;
+}
+
+.instruction-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(900px, 96vw);
+  height: min(80vh, 700px);
+  background: var(--aao-surface-0);
+  border: 1px solid var(--aao-border);
+  border-radius: var(--aao-r-xl);
+  overflow: hidden;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.6);
+  animation: modal-in 0.2s cubic-bezier(0.34,1.56,0.64,1);
+}
+
+@keyframes modal-in {
+  from { opacity: 0; transform: scale(0.95) translateY(8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.instruction-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  background: var(--aao-surface-1);
+  border-bottom: 1px solid var(--aao-border);
+  flex-shrink: 0;
+}
+
+.instruction-modal__title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--aao-text);
+}
+
+.instruction-modal__subtitle {
+  font-size: 10px;
+  color: var(--aao-muted);
+  margin-top: 2px;
+}
+
+.instruction-modal__textarea {
+  flex: 1;
+  width: 100%;
+  padding: 16px 20px;
+  background: var(--aao-surface-0);
+  color: var(--aao-text);
+  border: none;
+  resize: none;
+  font-family: var(--vscode-editor-font-family, 'Cascadia Code', monospace);
+  font-size: 13px;
+  line-height: 1.6;
+  outline: none;
+}
+.instruction-modal__textarea:focus { outline: none; }
 
 /* ─── Animations (shared) ────────────────────────────────────────────────────── */
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }

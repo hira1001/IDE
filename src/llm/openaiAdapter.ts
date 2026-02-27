@@ -18,6 +18,7 @@ export class OpenAIAdapter implements LLMGateway {
       ],
       max_tokens: request.max_tokens ?? 4096,
       temperature: request.temperature ?? 0.7,
+      stream: !!request.onChunk,
     };
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -35,6 +36,10 @@ export class OpenAIAdapter implements LLMGateway {
       throw new Error(`OpenAI API error ${response.status}: ${err}`);
     }
 
+    if (request.onChunk && response.body) {
+      return this._readStream(response, request.onChunk, start, request.model);
+    }
+
     const data = await response.json() as {
       choices: Array<{ message: { content: string } }>;
       usage: { prompt_tokens: number; completion_tokens: number };
@@ -46,6 +51,58 @@ export class OpenAIAdapter implements LLMGateway {
       input_tokens: data.usage?.prompt_tokens ?? 0,
       output_tokens: data.usage?.completion_tokens ?? 0,
       model: data.model ?? request.model,
+      duration_ms: Date.now() - start,
+    };
+  }
+
+  private async _readStream(
+    response: Response,
+    onChunk: (chunk: string) => void,
+    start: number,
+    model: string
+  ): Promise<LLMResponse> {
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let fullContent = '';
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const data = line.slice(6).trim();
+          if (data === '[DONE]' || !data) continue;
+
+          try {
+            const event = JSON.parse(data) as {
+              choices: Array<{ delta?: { content?: string } }>;
+            };
+            const chunk = event.choices?.[0]?.delta?.content;
+            if (chunk) {
+              fullContent += chunk;
+              onChunk(chunk);
+            }
+          } catch {
+            // Skip malformed SSE lines
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    return {
+      content: fullContent,
+      input_tokens: estimateTokens(fullContent),
+      output_tokens: estimateTokens(fullContent),
+      model,
       duration_ms: Date.now() - start,
     };
   }

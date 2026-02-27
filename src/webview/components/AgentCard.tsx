@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Agent, Task, TaskState, OutputFormat, LLMModel, WorkflowConfig, InputSource } from '../../types/index.js';
 import { useVSCode } from '../hooks/useVSCode.js';
+import { useAutoResize } from '../hooks/useAutoResize.js';
 
 const LLM_MODEL_GROUPS: { label: string; models: LLMModel[] }[] = [
   {
@@ -38,6 +39,8 @@ interface AgentCardProps {
   task: Task;
   taskState?: TaskState;
   output?: string;
+  /** Live streaming text chunk accumulation (shown while status === 'running'). */
+  streamingOutput?: string;
   config?: WorkflowConfig;
   onUpdateAgent: (agent: Agent) => void;
   onUpdateTask: (task: Task) => void;
@@ -55,7 +58,7 @@ interface AgentCardProps {
 }
 
 export function AgentCard({
-  agent, task, taskState, output, config,
+  agent, task, taskState, output, streamingOutput, config,
   onUpdateAgent, onUpdateTask, onRetry, onDelete,
   taskIndex, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd,
   onToast,
@@ -67,12 +70,21 @@ export function AgentCard({
   const [editedOutput, setEditedOutput] = useState(output ?? '');
   const [elapsed, setElapsed] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const streamingRef = useRef<HTMLDivElement>(null);
+
+  // Fullscreen instruction modal
+  const [showInstructionModal, setShowInstructionModal] = useState(false);
 
   // "Draft with AI" panel state
   const [showDraftPanel, setShowDraftPanel] = useState(false);
   const [draftBrief, setDraftBrief] = useState('');
   const [isDraftLoading, setIsDraftLoading] = useState(false);
   const [draftError, setDraftError] = useState<string | null>(null);
+
+  // Auto-resize refs — computed inline to keep hooks at the top level
+  const instructionRef = useAutoResize(task.instructions.join('\n\n'), 5);
+  const personaRef = useAutoResize(agent.persona, 3);
+  const draftBriefRef = useAutoResize(draftBrief, 3);
 
   const status = taskState?.status ?? 'idle';
   const isActive = status === 'running' || status === 'validating' || status === 'retrying';
@@ -87,6 +99,13 @@ export function AgentCard({
     }
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [isActive]);
+
+  // Auto-scroll streaming output to bottom
+  useEffect(() => {
+    if (streamingOutput && streamingRef.current) {
+      streamingRef.current.scrollTop = streamingRef.current.scrollHeight;
+    }
+  }, [streamingOutput]);
 
   useEffect(() => { setEditedOutput(output ?? ''); }, [output]);
 
@@ -134,6 +153,7 @@ export function AgentCard({
 
   // Instructions are stored as string[] but edited as a single unified markdown document
   const instructionText = task.instructions.join('\n\n');
+
   const updateInstructions = (val: string) =>
     onUpdateTask({ ...task, instructions: val ? [val] : [] });
 
@@ -271,9 +291,14 @@ export function AgentCard({
             {/* Persona */}
             <div className="field-group">
               <label className="field-label">{t('card.persona')}</label>
-              <textarea className="field-textarea" rows={5} value={agent.persona}
+              <textarea
+                ref={personaRef}
+                className="field-textarea field-textarea--autoresize"
+                rows={3}
+                value={agent.persona}
                 placeholder="Describe this agent's role, expertise, tone, and perspective. E.g.: 'You are a senior TypeScript engineer focused on clean, testable code. You prefer explicit types over inference and always consider edge cases.'"
-                onChange={(e) => onUpdateAgent({ ...agent, persona: e.target.value })} />
+                onChange={(e) => onUpdateAgent({ ...agent, persona: e.target.value })}
+              />
             </div>
 
             {/* Task Name */}
@@ -287,14 +312,23 @@ export function AgentCard({
             <div className="field-group">
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                 <label className="field-label" style={{ marginBottom: 0 }}>{t('card.instructions')}</label>
-                <button
-                  className="btn btn--ghost btn--xs"
-                  onClick={() => { setShowDraftPanel((v) => !v); setDraftError(null); }}
-                  title="Let AI draft detailed instructions from your brief description"
-                  style={{ fontSize: 11, gap: 3 }}
-                >
-                  ✨ {showDraftPanel ? 'Close Draft' : 'Draft with AI'}
-                </button>
+                <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                  <button
+                    className="btn btn--ghost btn--xs"
+                    onClick={() => setShowInstructionModal(true)}
+                    title="Open fullscreen editor"
+                    aria-label="Open fullscreen instruction editor"
+                    style={{ fontSize: 11 }}
+                  >⛶ Expand</button>
+                  <button
+                    className="btn btn--ghost btn--xs"
+                    onClick={() => { setShowDraftPanel((v) => !v); setDraftError(null); }}
+                    title="Let AI draft detailed instructions from your brief description"
+                    style={{ fontSize: 11, gap: 3 }}
+                  >
+                    ✨ {showDraftPanel ? 'Close Draft' : 'Draft with AI'}
+                  </button>
+                </div>
               </div>
 
               {/* "Draft with AI" inline panel */}
@@ -310,8 +344,9 @@ export function AgentCard({
                     Describe what you want this agent to do in plain language. The AI will expand it into a full structured instruction document.
                   </div>
                   <textarea
-                    className="field-textarea"
-                    rows={4}
+                    ref={draftBriefRef}
+                    className="field-textarea field-textarea--autoresize"
+                    rows={3}
                     value={draftBrief}
                     placeholder={`E.g.: "Review the TypeScript file for type safety issues, performance anti-patterns, and missing error handling. For each issue found, provide the line number, severity (critical/major/minor), a clear explanation, and a concrete code fix suggestion. Prioritize critical issues first."`}
                     onChange={(e) => setDraftBrief(e.target.value)}
@@ -341,8 +376,9 @@ export function AgentCard({
               )}
 
               <textarea
-                className="field-textarea"
-                rows={10}
+                ref={instructionRef}
+                className="field-textarea field-textarea--autoresize"
+                rows={5}
                 value={instructionText}
                 placeholder={
                   `Write the full task specification here. Markdown is supported.\n\n` +
@@ -461,6 +497,24 @@ export function AgentCard({
             </label>
           </div>
 
+          {/* ── Live streaming output (while running) ── */}
+          {isActive && streamingOutput && (
+            <div className="agent-card__streaming-section">
+              <div className="agent-card__output-header">
+                <span className="agent-card__output-title agent-card__output-title--streaming">
+                  <span className="agent-card__stream-dot" />
+                  Live Output
+                </span>
+                <span style={{ fontSize: 10, color: 'var(--aao-muted)', fontFamily: 'var(--aao-font-mono)' }}>
+                  {streamingOutput.length} chars
+                </span>
+              </div>
+              <div ref={streamingRef} className="agent-card__output-preview agent-card__output-preview--streaming">
+                {streamingOutput}
+              </div>
+            </div>
+          )}
+
           {/* ── Output preview ── */}
           {status === 'completed' && output && (
             <div className="agent-card__output-section">
@@ -529,6 +583,40 @@ export function AgentCard({
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Fullscreen instruction modal ── */}
+      {showInstructionModal && (
+        <div
+          className="instruction-modal-overlay"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowInstructionModal(false); }}
+        >
+          <div className="instruction-modal">
+            <div className="instruction-modal__header">
+              <div>
+                <div className="instruction-modal__title">{agent.name} — {t('card.instructions')}</div>
+                <div className="instruction-modal__subtitle">{task.task_name}</div>
+              </div>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <span style={{ fontSize: 10, color: 'var(--aao-muted)', fontFamily: 'var(--aao-font-mono)' }}>
+                  {instructionText.length} chars · ~{Math.ceil(instructionText.length / 4)} tokens
+                </span>
+                <button
+                  className="btn btn--ghost btn--sm"
+                  onClick={() => setShowInstructionModal(false)}
+                  aria-label="Close fullscreen editor"
+                >✕ Close</button>
+              </div>
+            </div>
+            <textarea
+              className="instruction-modal__textarea"
+              value={instructionText}
+              placeholder="Write the full task specification here. Markdown is supported."
+              onChange={(e) => updateInstructions(e.target.value)}
+              autoFocus
+            />
+          </div>
         </div>
       )}
     </div>

@@ -231,6 +231,8 @@ export interface LLMRequest {
   user_prompt: string;
   max_tokens?: number;
   temperature?: number;
+  /** Called with each text chunk as it streams in (optional). */
+  onChunk?: (chunk: string) => void;
 }
 
 export interface LLMResponse {
@@ -310,6 +312,7 @@ export type WebviewMessageType =
   | 'clipboard:write'
   | 'agent:draft_instruction'
   | 'agent:instruction_drafted'
+  | 'task:stream_chunk'
   | 'webview:ready';
 
 export interface WebviewMessage {

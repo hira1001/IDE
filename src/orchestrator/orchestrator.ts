@@ -18,11 +18,14 @@ import { getCostForTokens } from '../llm/pricing.js';
 
 export type StatusCallback = (state: SerializedExecutionState) => void;
 export type PauseCallback = (stepIndex: number, outputs: Record<string, string>) => Promise<void>;
+export type StreamChunkCallback = (taskId: string, chunk: string) => void;
 
 export interface OrchestratorOptions {
   apiKeys: ApiKeys;
   onStatusUpdate: StatusCallback;
   onPause?: PauseCallback;
+  /** Called with each streaming text chunk as it arrives from the LLM. */
+  onStreamChunk?: StreamChunkCallback;
   /** Timeout for each LLM call in ms (default: 60000) */
   timeout?: number;
 }
@@ -326,8 +329,12 @@ export class Orchestrator {
       this.activeGateways.set(taskId, gateway);
       const start = Date.now();
 
+      const onChunk = this.options.onStreamChunk
+        ? (chunk: string) => this.options.onStreamChunk!(taskId, chunk)
+        : undefined;
+
       let response = await this.callWithRetry(
-        () => gateway.chat({ model: agent.model, system_prompt: systemPrompt, user_prompt: userPrompt }),
+        () => gateway.chat({ model: agent.model, system_prompt: systemPrompt, user_prompt: userPrompt, onChunk }),
         this.timeout
       );
 
@@ -348,7 +355,7 @@ export class Orchestrator {
         const retryInstruction = promptBuilder.buildRetryPrompt(response.content, task.output_format);
         const retryUserPrompt = userPrompt + '\n\n' + retryInstruction;
         response = await this.callWithRetry(
-          () => gateway.chat({ model: agent.model, system_prompt: systemPrompt, user_prompt: retryUserPrompt }),
+          () => gateway.chat({ model: agent.model, system_prompt: systemPrompt, user_prompt: retryUserPrompt, onChunk }),
           this.timeout
         );
 

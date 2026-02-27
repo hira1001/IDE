@@ -8,6 +8,9 @@ interface ExecutionBarProps {
   totalCost: number;
   currentStep?: number;
   totalSteps?: number;
+  /** Count of completed tasks across all steps (for progress display). */
+  completedTasks?: number;
+  totalTasks?: number;
   onPreview: () => void;
   onRun: () => void;
   onStop: () => void;
@@ -32,6 +35,8 @@ export function ExecutionBar({
   onRerunFromStep,
   currentStep,
   totalSteps,
+  completedTasks,
+  totalTasks,
   onPreview,
   onRun,
   onStop,
@@ -44,7 +49,23 @@ export function ExecutionBar({
   const isPaused = status === 'paused';
   const isFinished = status === 'completed' || status === 'error' || status === 'aborted';
 
+  // Progress percentage based on completed tasks
+  const progressPct = totalTasks && totalTasks > 0
+    ? Math.round(((completedTasks ?? 0) / totalTasks) * 100)
+    : totalSteps && totalSteps > 0
+      ? Math.round(((currentStep ?? 0) / totalSteps) * 100)
+      : 0;
+  const showProgress = (isRunning || isPaused) && totalSteps !== undefined && totalSteps > 0;
+
   return (
+    <>
+      {/* Progress bar (full width, above the bar) */}
+      {showProgress && (
+        <div className="execution-bar__progress-track" role="progressbar" aria-valuenow={progressPct} aria-valuemin={0} aria-valuemax={100}>
+          <div className="execution-bar__progress-fill" style={{ width: `${progressPct}%` }} />
+        </div>
+      )}
+
     <div className="execution-bar">
       {/* Left: status pill + cost */}
       <div className="execution-bar__left">
@@ -55,10 +76,15 @@ export function ExecutionBar({
           {STATUS_LABELS[status]}
         </span>
 
-        {/* Step progress during run */}
-        {(isRunning || isPaused) && totalSteps !== undefined && totalSteps > 0 && (
+        {/* Step + task progress during run */}
+        {showProgress && (
           <span className="execution-bar__step-progress" aria-label={`Step ${(currentStep ?? 0) + 1} of ${totalSteps}`}>
-            Step {(currentStep ?? 0) + 1} / {totalSteps}
+            Step {(currentStep ?? 0) + 1}/{totalSteps}
+            {totalTasks !== undefined && totalTasks > 0 && (
+              <> · {completedTasks ?? 0}/{totalTasks} tasks</>
+            )}
+            {' '}
+            <span className="execution-bar__pct">{progressPct}%</span>
           </span>
         )}
 
@@ -146,5 +172,6 @@ export function ExecutionBar({
         )}
       </div>
     </div>
+    </>
   );
 }
