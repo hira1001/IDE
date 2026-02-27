@@ -148,4 +148,52 @@ describe('validateWorkflow', () => {
     const errors = validateWorkflow(ollamaConfig, validSource, {});
     expect(errors.filter((e) => e.type === 'error')).toHaveLength(0);
   });
+
+  it('warns when a parallel step has more than 5 tasks', () => {
+    const makeTask = (id: string): typeof validConfig.workflow[0]['tasks'][0] => ({
+      task_id: id, agent_id: 'agent_001', task_name: id,
+      instructions: [], constraints: [],
+      output_format: 'PlainText', output_key: id,
+      input_mapping: [], enable_handover_note: false,
+    });
+    const manyParallelConfig: WorkflowConfig = {
+      agents: [{ id: 'agent_001', name: 'Writer', persona: 'P', model: 'gpt-4o' }],
+      workflow: [{
+        step: 1, type: 'parallel', pause_after: false,
+        tasks: ['t1','t2','t3','t4','t5','t6'].map(makeTask),
+      }],
+    };
+    const errors = validateWorkflow(manyParallelConfig, validSource, { openai: 'sk-test' });
+    expect(errors.some((e) => e.message.includes('Maximum allowed parallel tasks is 5'))).toBe(true);
+  });
+
+  it('warns when control flow creates a cycle', () => {
+    const cyclicConfig: WorkflowConfig = {
+      agents: [{ id: 'agent_001', name: 'Writer', persona: 'P', model: 'gpt-4o' }],
+      workflow: [
+        {
+          step: 1, type: 'sequential', pause_after: false,
+          then_goto: 2,
+          tasks: [{
+            task_id: 't1', agent_id: 'agent_001', task_name: 'T1',
+            instructions: [], constraints: [],
+            output_format: 'PlainText', output_key: 'o1',
+            input_mapping: [], enable_handover_note: false,
+          }],
+        },
+        {
+          step: 2, type: 'sequential', pause_after: false,
+          then_goto: 1,  // loops back → cycle
+          tasks: [{
+            task_id: 't2', agent_id: 'agent_001', task_name: 'T2',
+            instructions: [], constraints: [],
+            output_format: 'PlainText', output_key: 'o2',
+            input_mapping: [], enable_handover_note: false,
+          }],
+        },
+      ],
+    };
+    const errors = validateWorkflow(cyclicConfig, validSource, { openai: 'sk-test' });
+    expect(errors.some((e) => e.message.toLowerCase().includes('cycle') || e.message.toLowerCase().includes('loop'))).toBe(true);
+  });
 });

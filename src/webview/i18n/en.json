@@ -6,6 +6,7 @@
     "noSource": "No active file. Open a file in the editor to use as input.",
     "addStep": "+ Add Step",
     "generate": "Generate",
+    "generateAndRun": "Generate & Run",
     "generating": "Generating workflow…",
     "preview": "Preview",
     "run": "Run",

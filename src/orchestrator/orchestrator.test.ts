@@ -165,6 +165,48 @@ describe('Orchestrator', () => {
         });
     });
 
+    describe('executeFrom()', () => {
+        it('re-runs workflow starting from the given step index', async () => {
+            const step2Task: Task = {
+                task_id: 'task_2',
+                task_name: 'Task 2',
+                agent_id: 'agent_1',
+                instructions: ['Do step 2'],
+                constraints: [],
+                input_mapping: [],
+                output_key: 'out_2',
+                output_format: 'PlainText',
+                enable_handover_note: false,
+            };
+            const twoStepConfig: WorkflowConfig = {
+                agents: [mockAgent],
+                workflow: [
+                    mockStep,
+                    { step: 2, type: 'sequential', tasks: [step2Task], pause_after: false },
+                ],
+            };
+
+            mockChat.mockResolvedValue({
+                content: 'Step 2 output',
+                input_tokens: 5,
+                output_tokens: 5,
+                model: 'gpt-4o',
+                duration_ms: 50,
+            });
+
+            // Seed step 1 output so step 2 can reference it
+            orchestrator.getStateManager().setOutput('out_1', 'existing output');
+
+            await orchestrator.executeFrom(twoStepConfig, 1); // start from index 1 (step 2)
+
+            const st = orchestrator.getStateManager().serialize();
+            expect(st.status).toBe('completed');
+            expect(st.task_states['task_2'].status).toBe('completed');
+            // task_1 was NOT reinitialised — it keeps whatever state it had
+            expect(st.task_states['task_1']).toBeUndefined();
+        });
+    });
+
     describe('abort()', () => {
         it('aborts the execution and sets status to aborted', async () => {
             let rejectChat: any;
