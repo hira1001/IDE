@@ -15,7 +15,18 @@
     "saveTemplate": "テンプレートとして保存",
     "loadTemplate": "テンプレートを読み込む",
     "emptyState": "上のフォームにワークフローの指示を入力してください",
-    "emptyStateSub": "または既存のテンプレートを読み込んでください"
+    "emptyStateSub": "または既存のテンプレートを読み込んでください",
+    "examples": "サンプル",
+    "examplePrompts": [
+      "{{topic}}についてのブログ記事を作成し、エディターにレビュー・改善させる",
+      "このTypeScriptファイルのバグを分析して修正案を提示する",
+      "アクティブファイルのユニットテストを書いて、カバレッジをレビューさせる",
+      "このコードを要約してMarkdownでドキュメントを生成する"
+    ],
+    "keyboardShortcuts": "キーボードショートカット",
+    "aborted": "ワークフローを中断しました",
+    "templateSaved": "テンプレートを保存しました",
+    "copied": "クリップボードにコピーしました"
   },
   "step": {
     "parallel": "並列",
@@ -49,6 +60,14 @@
     "retry": "再実行",
     "editOutput": "出力を編集",
     "viewOutput": "全文を見る",
+    "expandInstructions": "拡大",
+    "closeInstructions": "閉じる",
+    "draftWithAI": "AIで下書き",
+    "closeDraft": "下書きを閉じる",
+    "liveOutput": "ライブ出力",
+    "viewFullOutput": "全文を見る",
+    "closeOutputModal": "閉じる",
+    "copyOutput": "コピー",
     "status": {
       "idle": "待機中",
       "running": "実行中",
@@ -101,5 +120,15 @@
   },
   "cost": {
     "estimated": "概算コスト"
+  },
+  "shortcuts": {
+    "title": "キーボードショートカット",
+    "generate": "ワークフローを生成",
+    "generateAndRun": "生成して実行",
+    "run": "ワークフローを実行",
+    "stop": "実行を停止",
+    "undo": "元に戻す",
+    "redo": "やり直す",
+    "close": "閉じる"
   }
 }

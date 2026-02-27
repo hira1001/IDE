@@ -153,6 +153,7 @@ export function App() {
 
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [showTemplateSelector, setShowTemplateSelector] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const [pausedOutputs, setPausedOutputs] = useState<Record<string, string> | null>(null);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
@@ -187,7 +188,7 @@ export function App() {
 
   // Show toast on abort
   React.useEffect(() => {
-    if (status === 'aborted') addToast('Workflow aborted', 'info');
+    if (status === 'aborted') addToast(t('app.aborted'), 'info');
   }, [status]); // addToast is stable (useCallback with no deps)
 
   // Pending auto-run after Generate & Run
@@ -226,6 +227,14 @@ export function App() {
     const target = e.target as HTMLElement;
     const isEditableTarget =
       target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+
+    // Show shortcuts panel with '?' when not editing text
+    if (e.key === '?' && !isEditableTarget) {
+      e.preventDefault();
+      setShowShortcuts(true);
+    }
+    if (e.key === 'Escape') setShowShortcuts(false);
+
     if (isEditableTarget) return;
 
     if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey && canUndo) {
@@ -310,6 +319,13 @@ export function App() {
               aria-label="Redo change"
             >↪</button>
           )}
+          <button
+            className="btn btn--icon-only"
+            onClick={() => setShowShortcuts(true)}
+            title={t('app.keyboardShortcuts')}
+            aria-label={t('app.keyboardShortcuts')}
+            style={{ fontSize: 13, fontWeight: 600 }}
+          >?</button>
           <button
             className="btn btn--icon-only"
             onClick={handleOpenTemplates}
@@ -450,8 +466,25 @@ export function App() {
               <path d="M7 23c0-3.31 2.69-6 6-6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" opacity="0.3" transform="scale(-1,1) translate(-20,0)"/>
             </svg>
           </div>
-          <p className="empty-state__text">{t('app.emptyState') || 'Describe your workflow above to get started'}</p>
-          <p className="empty-state__sub">{t('app.emptyStateSub') || 'or load an existing template'}</p>
+          <p className="empty-state__text">{t('app.emptyState')}</p>
+          <p className="empty-state__sub">{t('app.emptyStateSub')}</p>
+          <div className="empty-state__examples">
+            <div className="empty-state__examples-title">{t('app.examples')}</div>
+            <div className="empty-state__examples-list">
+              {(t('app.examplePrompts', { returnObjects: true }) as string[]).map((prompt: string, i: number) => (
+                <button
+                  key={i}
+                  className="empty-state__example-btn"
+                  onClick={() => {
+                    setInstruction(prompt);
+                    chatInputRef.current?.focus();
+                  }}
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
@@ -496,7 +529,7 @@ export function App() {
         <TemplateSaveDialog
           config={config}
           onClose={() => setShowSaveDialog(false)}
-          onSaved={() => { setShowSaveDialog(false); addToast('Template saved', 'success'); }}
+          onSaved={() => { setShowSaveDialog(false); addToast(t('app.templateSaved'), 'success'); }}
         />
       )}
 
@@ -506,6 +539,54 @@ export function App() {
           onSelect={handleLoadTemplate}
           onClose={() => setShowTemplateSelector(false)}
         />
+      )}
+
+      {/* ── Keyboard shortcuts modal ─────────── */}
+      {showShortcuts && (
+        <div
+          className="modal-overlay"
+          onClick={() => setShowShortcuts(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label={t('shortcuts.title')}
+        >
+          <div className="shortcuts-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="shortcuts-modal__header">
+              <span className="shortcuts-modal__title">{t('shortcuts.title')}</span>
+              <button
+                className="btn btn--ghost btn--sm"
+                onClick={() => setShowShortcuts(false)}
+                aria-label={t('shortcuts.close')}
+              >✕</button>
+            </div>
+            <div className="shortcuts-modal__list">
+              <div className="shortcuts-modal__row">
+                <div className="shortcuts-modal__keys"><kbd>Ctrl</kbd>+<kbd>Enter</kbd></div>
+                <span>{t('shortcuts.generate')}</span>
+              </div>
+              <div className="shortcuts-modal__row">
+                <div className="shortcuts-modal__keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Enter</kbd></div>
+                <span>{t('shortcuts.generateAndRun')}</span>
+              </div>
+              <div className="shortcuts-modal__row">
+                <div className="shortcuts-modal__keys"><kbd>Ctrl</kbd>+<kbd>Z</kbd></div>
+                <span>{t('shortcuts.undo')}</span>
+              </div>
+              <div className="shortcuts-modal__row">
+                <div className="shortcuts-modal__keys"><kbd>Ctrl</kbd>+<kbd>Y</kbd></div>
+                <span>{t('shortcuts.redo')}</span>
+              </div>
+              <div className="shortcuts-modal__row">
+                <div className="shortcuts-modal__keys"><kbd>?</kbd></div>
+                <span>{t('shortcuts.title')}</span>
+              </div>
+              <div className="shortcuts-modal__row">
+                <div className="shortcuts-modal__keys"><kbd>Esc</kbd></div>
+                <span>{t('shortcuts.close')}</span>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── Toast notifications ─────────────── */}

@@ -74,6 +74,8 @@ export function AgentCard({
 
   // Fullscreen instruction modal
   const [showInstructionModal, setShowInstructionModal] = useState(false);
+  // Full output viewer modal
+  const [showOutputModal, setShowOutputModal] = useState(false);
 
   // "Draft with AI" panel state
   const [showDraftPanel, setShowDraftPanel] = useState(false);
@@ -194,12 +196,13 @@ export function AgentCard({
 
   const handleCopyOutput = () => {
     if (!output) return;
+    const msg = t('app.copied', 'Copied to clipboard');
     navigator.clipboard.writeText(output).then(() => {
-      onToast?.('Output copied to clipboard', 'success');
+      onToast?.(msg, 'success');
     }).catch(() => {
       // Fallback: delegate to extension host clipboard API
       postMessage({ type: 'clipboard:write', payload: { text: output } });
-      onToast?.('Output copied to clipboard', 'success');
+      onToast?.(msg, 'success');
     });
   };
 
@@ -521,9 +524,15 @@ export function AgentCard({
               <div className="agent-card__output-header">
                 <span className="agent-card__output-title">Output</span>
                 <button className="btn btn--ghost btn--xs"
+                  onClick={() => setShowOutputModal(true)}
+                  title={t('card.viewFullOutput')}
+                  aria-label={t('card.viewFullOutput')}>
+                  ⛶ {t('card.viewFullOutput')}
+                </button>
+                <button className="btn btn--ghost btn--xs"
                   onClick={handleCopyOutput}
-                  title="Copy output to clipboard"
-                  aria-label="Copy output to clipboard">
+                  title={t('card.copyOutput', 'Copy')}
+                  aria-label={t('card.copyOutput', 'Copy')}>
                   📋
                 </button>
                 <button className="btn btn--ghost btn--xs"
@@ -583,6 +592,40 @@ export function AgentCard({
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Full output viewer modal ── */}
+      {showOutputModal && output && (
+        <div
+          className="instruction-modal-overlay"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowOutputModal(false); }}
+        >
+          <div className="instruction-modal">
+            <div className="instruction-modal__header">
+              <div>
+                <div className="instruction-modal__title">{agent.name} — Output</div>
+                <div className="instruction-modal__subtitle">
+                  {task.task_name} · {output.length.toLocaleString()} chars · ~{Math.ceil(output.length / 4).toLocaleString()} tokens
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <button
+                  className="btn btn--ghost btn--sm"
+                  onClick={handleCopyOutput}
+                  aria-label={t('card.copyOutput', 'Copy')}
+                >📋 {t('card.copyOutput', 'Copy')}</button>
+                <button
+                  className="btn btn--ghost btn--sm"
+                  onClick={() => setShowOutputModal(false)}
+                  aria-label={t('card.closeOutputModal', 'Close')}
+                >✕ {t('card.closeOutputModal', 'Close')}</button>
+              </div>
+            </div>
+            <div className="instruction-modal__output-body">
+              {output}
+            </div>
+          </div>
         </div>
       )}
 

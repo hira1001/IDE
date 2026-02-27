@@ -15,7 +15,18 @@
     "saveTemplate": "Save as Template",
     "loadTemplate": "Load Template",
     "emptyState": "Describe your workflow above to get started",
-    "emptyStateSub": "or load an existing template"
+    "emptyStateSub": "or load an existing template",
+    "examples": "Examples",
+    "examplePrompts": [
+      "Draft a blog post about {{topic}}, then have an editor review and improve it",
+      "Analyze this TypeScript file for bugs and suggest fixes",
+      "Write unit tests for the active file, then have a reviewer check coverage",
+      "Summarize this code, then generate documentation in Markdown"
+    ],
+    "keyboardShortcuts": "Keyboard Shortcuts",
+    "aborted": "Workflow aborted",
+    "templateSaved": "Template saved",
+    "copied": "Copied to clipboard"
   },
   "step": {
     "parallel": "Parallel",
@@ -49,6 +60,14 @@
     "retry": "Retry",
     "editOutput": "Edit Output",
     "viewOutput": "View Full Output",
+    "expandInstructions": "Expand",
+    "closeInstructions": "Close",
+    "draftWithAI": "Draft with AI",
+    "closeDraft": "Close Draft",
+    "liveOutput": "Live Output",
+    "viewFullOutput": "View Full Output",
+    "closeOutputModal": "Close",
+    "copyOutput": "Copy",
     "status": {
       "idle": "Idle",
       "running": "Running",
@@ -101,5 +120,15 @@
   },
   "cost": {
     "estimated": "Est. cost"
+  },
+  "shortcuts": {
+    "title": "Keyboard Shortcuts",
+    "generate": "Generate workflow",
+    "generateAndRun": "Generate & Run",
+    "run": "Run workflow",
+    "stop": "Stop execution",
+    "undo": "Undo",
+    "redo": "Redo",
+    "close": "Close"
   }
 }
