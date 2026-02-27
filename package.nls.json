@@ -1,0 +1,7 @@
+{
+  "commands.openPanel": "Open AI Agent Orchestrator",
+  "commands.createFromTemplate": "Create Workflow from Template",
+  "commands.configureApiKeys": "Configure API Keys",
+  "config.defaultModel": "Default LLM model to use (e.g. gpt-4o, claude-opus-4-5-20251001, gemini-1.5-pro)",
+  "config.language": "UI language for AI Agent Orchestrator (en / ja)"
+}

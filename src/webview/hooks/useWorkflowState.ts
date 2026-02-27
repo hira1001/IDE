@@ -49,7 +49,7 @@ export function useWorkflowState() {
           if (p.status === 'generating') {
             setState((s) => ({ ...s, isGenerating: true, generationError: null }));
           } else if (p.status === 'done' && p.config) {
-            setState((s) => ({ ...s, config: p.config, isGenerating: false }));
+            setState((s) => ({ ...s, config: p.config!, isGenerating: false }));
           } else if (p.status === 'error') {
             setState((s) => ({ ...s, isGenerating: false, generationError: p.error ?? 'Unknown error' }));
           }

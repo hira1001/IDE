@@ -1,0 +1,7 @@
+{
+  "commands.openPanel": "AI Agent Orchestrator を開く",
+  "commands.createFromTemplate": "テンプレートからワークフローを作成",
+  "commands.configureApiKeys": "APIキーを設定",
+  "config.defaultModel": "デフォルトで使用するLLMモデル (例: gpt-4o, claude-opus-4-5-20251001, gemini-1.5-pro)",
+  "config.language": "AI Agent Orchestrator のUI言語 (en / ja)"
+}
