@@ -194,6 +194,7 @@ export function App() {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // Ctrl+Enter / Cmd+Enter shortcuts work from anywhere (intended for the instruction textarea)
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       if (e.shiftKey) {
         handleGenerateAndRun();
@@ -201,6 +202,15 @@ export function App() {
         handleGenerate();
       }
     }
+
+    // Undo/redo must NOT fire when the user is editing text in an input or textarea,
+    // since those elements have their own native undo stack (typing Ctrl+Z to undo a
+    // word edit must not accidentally undo the entire agent config).
+    const target = e.target as HTMLElement;
+    const isEditableTarget =
+      target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+    if (isEditableTarget) return;
+
     if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey && canUndo) {
       e.preventDefault();
       undo();

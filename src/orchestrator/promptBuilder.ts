@@ -129,14 +129,14 @@ ${sections.join('\n\n')}${noteSection}
     // Active file
     if (ctx.activeFile) {
       const f = ctx.activeFile;
-      parts.push(`<active_file name="${f.filename}" language="${f.language_id}" lines="${f.line_count}">\n${f.content}\n</active_file>`);
+      parts.push(`<active_file name="${xa(f.filename)}" language="${xa(f.language_id)}" lines="${f.line_count}">\n${f.content}\n</active_file>`);
     }
 
     // Related files
     if (ctx.relatedFiles.length > 0) {
       parts.push('<related_files>');
       for (const f of ctx.relatedFiles) {
-        parts.push(`<file name="${f.relativePath}" reason="${f.reason}" language="${f.language_id}">\n${f.content}\n</file>`);
+        parts.push(`<file name="${xa(f.relativePath)}" reason="${xa(f.reason)}" language="${xa(f.language_id)}">\n${f.content}\n</file>`);
       }
       parts.push('</related_files>');
     }
@@ -154,6 +154,11 @@ ${formatInstructions}
 前回の出力（先頭200文字）:
 ${previousOutput.slice(0, 200)}`;
   }
+}
+
+/** Escape a string for safe use in an XML attribute value. */
+function xa(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function getFormatInstructions(format: string): string {

@@ -205,6 +205,33 @@ describe('Orchestrator', () => {
             // task_1 was NOT reinitialised — it keeps whatever state it had
             expect(st.task_states['task_1']).toBeUndefined();
         });
+
+        it('throws immediately when fromStepIndex is out of bounds', async () => {
+            await expect(orchestrator.executeFrom(baseConfig, 99)).rejects.toThrow(
+                /fromStepIndex 99 is out of bounds/
+            );
+        });
+
+        it('resets loop counts for re-run steps to avoid stale counters', async () => {
+            // Manually seed a stale loop count for step 1
+            orchestrator.getStateManager().incrementLoopCount(1); // loop_counts[1] = 1
+            orchestrator.getStateManager().incrementLoopCount(1); // loop_counts[1] = 2
+
+            mockChat.mockResolvedValue({
+                content: 'fresh output',
+                input_tokens: 5,
+                output_tokens: 5,
+                model: 'gpt-4o',
+                duration_ms: 50,
+            });
+
+            await orchestrator.executeFrom(baseConfig, 0);
+
+            // After executeFrom, loop count for step 1 should have been reset then
+            // incremented by getLoopCount inside runTask (which reads 0 after reset)
+            const loopCountAfter = orchestrator.getStateManager().getLoopCount(1);
+            expect(loopCountAfter).toBe(0); // reset to 0, runTask reads it but doesn't increment
+        });
     });
 
     describe('abort()', () => {

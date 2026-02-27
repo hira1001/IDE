@@ -69,8 +69,9 @@ export function validateWorkflow(
       outputKeys.add(task.output_key);
 
       // Check input_mapping references
+      const SPECIAL_SOURCE_IDS = new Set(['__source__', '__project__', '__tree__']);
       for (const mapping of task.input_mapping) {
-        if (mapping.from_agent_id === '__source__') continue;
+        if (SPECIAL_SOURCE_IDS.has(mapping.from_agent_id)) continue;
         // Find referenced agent's task
         const refTask = config.workflow
           .flatMap((s) => s.tasks)

@@ -196,4 +196,26 @@ describe('validateWorkflow', () => {
     const errors = validateWorkflow(cyclicConfig, validSource, { openai: 'sk-test' });
     expect(errors.some((e) => e.message.toLowerCase().includes('cycle') || e.message.toLowerCase().includes('loop'))).toBe(true);
   });
+
+  it('does not flag __project__ or __tree__ input_mapping as unknown agents', () => {
+    const config: WorkflowConfig = {
+      agents: [{ id: 'agent_001', name: 'Writer', persona: 'P', model: 'gpt-4o' }],
+      workflow: [{
+        step: 1, type: 'sequential', pause_after: false,
+        tasks: [{
+          task_id: 't1', agent_id: 'agent_001', task_name: 'T1',
+          instructions: [], constraints: [],
+          output_format: 'PlainText', output_key: 'o1',
+          enable_handover_note: false,
+          input_mapping: [
+            { from_step: 0, from_agent_id: '__project__', label: 'Project Context' },
+            { from_step: 0, from_agent_id: '__tree__', label: 'File Tree' },
+          ],
+        }],
+      }],
+    };
+    const errors = validateWorkflow(config, validSource, { openai: 'sk-test' });
+    const agentErrors = errors.filter((e) => e.message.includes('unknown agent'));
+    expect(agentErrors).toHaveLength(0);
+  });
 });
