@@ -1565,5 +1565,87 @@ body {
 }
 .template-tag--more { background: transparent; border-color: transparent; color: var(--aao-muted); opacity: 0.6; }
 
+/* ─── Drag & Drop ────────────────────────────────────────────────────────────── */
+.agent-card--dragging {
+  opacity: 0.4;
+  cursor: grabbing;
+  box-shadow: none;
+}
+.agent-card--drag-over {
+  border-color: var(--aao-accent) !important;
+  box-shadow: 0 0 0 2px rgba(14,165,233,0.3);
+  transform: translateY(-2px);
+}
+.agent-card__drag { cursor: grab; }
+.agent-card__drag:active { cursor: grabbing; }
+
+/* ─── Toast notifications ────────────────────────────────────────────────────── */
+.toast-container {
+  position: fixed;
+  bottom: 20px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 9999;
+  pointer-events: none;
+}
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border-radius: var(--aao-r);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  pointer-events: all;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+  animation: toast-in 0.2s ease-out;
+  max-width: 280px;
+  word-break: break-word;
+}
+.toast--success {
+  background: rgba(34,197,94,0.15);
+  border: 1px solid rgba(34,197,94,0.4);
+  color: #4ade80;
+}
+.toast--error {
+  background: rgba(239,68,68,0.15);
+  border: 1px solid rgba(239,68,68,0.4);
+  color: #f87171;
+}
+.toast--info {
+  background: rgba(14,165,233,0.15);
+  border: 1px solid rgba(14,165,233,0.4);
+  color: #38bdf8;
+}
+.toast__dismiss {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  margin-left: auto;
+  opacity: 0.5;
+  color: inherit;
+  font-size: 14px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.toast__dismiss:hover { opacity: 1; }
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* ─── Output action buttons ──────────────────────────────────────────────────── */
+.output-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
 /* ─── Animations (shared) ────────────────────────────────────────────────────── */
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
