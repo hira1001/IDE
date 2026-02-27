@@ -55,13 +55,15 @@ export function validateWorkflow(
       }
 
       // Check parallel duplicate output keys (same step, same key = conflict)
-      if (step.type === 'parallel' && stepKeys.has(task.output_key)) {
-        errors.push({
-          type: 'error',
-          message: `Duplicate output_key "${task.output_key}" in parallel step ${step.step}.`,
-          task_id: task.task_id,
-          step: step.step,
-        });
+      if (step.type === 'parallel') {
+        if (stepKeys.has(task.output_key)) {
+          errors.push({
+            type: 'error',
+            message: `Duplicate output_key "${task.output_key}" in parallel step ${step.step}.`,
+            task_id: task.task_id,
+            step: step.step,
+          });
+        }
       }
       stepKeys.add(task.output_key);
       outputKeys.add(task.output_key);
@@ -82,6 +84,14 @@ export function validateWorkflow(
           });
         }
       }
+    }
+
+    if (step.type === 'parallel' && step.tasks.length > 5) {
+      errors.push({
+        type: 'error',
+        message: `Step ${step.step} is a parallel step with ${step.tasks.length} tasks. Maximum allowed parallel tasks is 5.`,
+        step: step.step,
+      });
     }
 
     stepOutputKeys.set(step.step, stepKeys);

@@ -583,6 +583,7 @@ function getWebviewHtml(context: vscode.ExtensionContext, webview: vscode.Webvie
     style-src ${webview.cspSource} 'unsafe-inline';
     font-src ${webview.cspSource};
     img-src ${webview.cspSource} data:;
+    connect-src https://api.openai.com https://api.anthropic.com https://generativelanguage.googleapis.com http://localhost:* http://127.0.0.1:*;
   " />
   <link rel="stylesheet" href="${styleUri}" />
   <title>AI Agent Orchestrator</title>

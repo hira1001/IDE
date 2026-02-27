@@ -72,7 +72,9 @@ export class Orchestrator {
 
     try {
       await this.runWorkflow(config);
-      this.stateManager.setStatus('completed');
+      if (this.stateManager.getStatus() !== 'aborted') {
+        this.stateManager.setStatus('completed');
+      }
     } catch (err) {
       if ((err as Error).name === 'AbortError') {
         this.stateManager.setStatus('aborted');
@@ -126,7 +128,9 @@ export class Orchestrator {
 
     try {
       await this.runWorkflowFrom(config, fromStepIndex);
-      this.stateManager.setStatus('completed');
+      if (this.stateManager.getStatus() !== 'aborted') {
+        this.stateManager.setStatus('completed');
+      }
     } catch (err) {
       if ((err as Error).name === 'AbortError') {
         this.stateManager.setStatus('aborted');
