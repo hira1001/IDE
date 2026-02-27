@@ -1280,6 +1280,14 @@ body {
   animation: spin 0.7s linear infinite;
 }
 
+.execution-bar__step-progress {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--aao-muted);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
 /* idle pill (no border) */
 .pill--idle { color: var(--aao-muted); opacity: 0.6; }
 
