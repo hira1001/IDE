@@ -136,6 +136,13 @@ export function useWorkflowState() {
     postMessage({ type: 'workflow:pause_resume' });
   }, [postMessage]);
 
+  const executeFromStep = useCallback(
+    (config: WorkflowConfig, fromStep: number) => {
+      postMessage({ type: 'workflow:execute_from', payload: { config, fromStep } });
+    },
+    [postMessage]
+  );
+
   const dryRun = useCallback(
     (config: WorkflowConfig) => {
       postMessage({ type: 'workflow:dryrun', payload: { config } });
@@ -220,6 +227,7 @@ export function useWorkflowState() {
     ...state,
     generateWorkflow,
     executeWorkflow,
+    executeFromStep,
     abortWorkflow,
     retryTask,
     resumeFromPause,

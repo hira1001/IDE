@@ -365,6 +365,12 @@ export function AgentCard({
                   💾
                 </button>
                 <button className="btn btn--ghost btn--xs"
+                  onClick={() => postMessage({ type: 'output:apply', payload: { content: output } })}
+                  title="Apply output as diff in editor"
+                  aria-label="Apply output as diff in editor">
+                  ⚡ Apply
+                </button>
+                <button className="btn btn--ghost btn--xs"
                   onClick={() => setEditingOutput((v) => !v)}>
                   {editingOutput ? '✓ Done' : '✏️ Edit'}
                 </button>

@@ -122,6 +122,7 @@ export function App() {
     generationError,
     generateWorkflow,
     executeWorkflow,
+    executeFromStep,
     abortWorkflow,
     retryTask,
     resumeFromPause,
@@ -423,6 +424,7 @@ export function App() {
           onStop={abortWorkflow}
           onResume={resumeFromPause}
           onSaveTemplate={() => setShowSaveDialog(true)}
+          onRerunFromStep={config ? (fromStep) => executeFromStep(config, fromStep) : undefined}
         />
       )}
 

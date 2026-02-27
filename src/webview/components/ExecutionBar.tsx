@@ -13,6 +13,7 @@ interface ExecutionBarProps {
   onStop: () => void;
   onResume: () => void;
   onSaveTemplate: () => void;
+  onRerunFromStep?: (fromStep: number) => void;
 }
 
 const STATUS_LABELS: Record<WorkflowStatus, string> = {
@@ -28,6 +29,7 @@ export function ExecutionBar({
   status,
   dryRunResult,
   totalCost,
+  onRerunFromStep,
   currentStep,
   totalSteps,
   onPreview,
@@ -87,6 +89,16 @@ export function ExecutionBar({
 
       {/* Right: action buttons */}
       <div className="execution-bar__actions">
+        {status === 'error' && onRerunFromStep && currentStep !== undefined && (
+          <button
+            className="btn btn--ghost btn--sm"
+            onClick={() => onRerunFromStep(currentStep)}
+            title={`Re-run from step ${currentStep + 1}`}
+            aria-label={`Re-run workflow from step ${currentStep + 1}`}>
+            ↩ Re-run from step {currentStep + 1}
+          </button>
+        )}
+
         {isFinished && (
           <button className="btn btn--ghost btn--sm" onClick={onSaveTemplate} title={t('app.saveTemplate')}>
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
