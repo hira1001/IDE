@@ -109,6 +109,62 @@ export class MetaAIService {
     }
   }
 
+  /**
+   * Expand a short user brief into a full, structured markdown instruction
+   * document for a single agent. Used by the "Draft with AI" feature in AgentCard.
+   */
+  async draftAgentInstruction(
+    brief: string,
+    ctx: { agentName: string; persona: string; taskName: string; fileName?: string }
+  ): Promise<string> {
+    const systemPrompt = `You are an expert AI prompt engineer. \
+Your job is to expand a user's rough task description into a precise, \
+comprehensive markdown instruction document for an AI agent. \
+The document must be detailed enough that the agent can execute the task \
+correctly without asking follow-up questions.
+
+Structure your output with these sections (use ## headings):
+## Objective
+One paragraph stating exactly what success looks like.
+
+## Step-by-step Process
+Numbered steps. Each step should be specific and actionable. \
+Include substeps where needed. Aim for 4-8 steps.
+
+## Input Handling
+How to read and interpret the provided input content.
+
+## Output Requirements
+Exact format, structure, length, and quality bar expected.
+
+## Key Considerations
+Bullet list of important nuances, edge cases, and things to watch for.
+
+## Constraints
+Things the agent must NOT do (omissions, scope limits, style rules, etc.).
+
+Output only the markdown document. No preamble. No explanation. No code fences.`;
+
+    const userPrompt =
+      `Agent name: ${ctx.agentName}\n` +
+      `Agent persona: ${ctx.persona || '(not specified)'}\n` +
+      `Task name: ${ctx.taskName}\n` +
+      (ctx.fileName ? `Working on file: ${ctx.fileName}\n` : '') +
+      `\nUser's brief:\n${brief}\n\n` +
+      `Write comprehensive instructions for this agent.`;
+
+    const gateway = getGateway(this.model, this.apiKeys);
+    const response = await gateway.chat({
+      model: this.model,
+      system_prompt: systemPrompt,
+      user_prompt: userPrompt,
+      max_tokens: 2048,
+      temperature: 0.4,
+    });
+
+    return response.content.trim();
+  }
+
   private validateConfig(config: unknown): asserts config is WorkflowConfig {
     const c = config as WorkflowConfig;
     if (!Array.isArray(c.agents) || !Array.isArray(c.workflow)) {

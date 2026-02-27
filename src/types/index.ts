@@ -307,7 +307,9 @@ export type WebviewMessageType =
   | 'output:open_tab'
   | 'output:save'
   | 'output:apply'
-  | 'clipboard:write';
+  | 'clipboard:write'
+  | 'agent:draft_instruction'
+  | 'agent:instruction_drafted';
 
 export interface WebviewMessage {
   type: WebviewMessageType;

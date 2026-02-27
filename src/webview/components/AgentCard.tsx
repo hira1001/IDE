@@ -68,6 +68,12 @@ export function AgentCard({
   const [elapsed, setElapsed] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // "Draft with AI" panel state
+  const [showDraftPanel, setShowDraftPanel] = useState(false);
+  const [draftBrief, setDraftBrief] = useState('');
+  const [isDraftLoading, setIsDraftLoading] = useState(false);
+  const [draftError, setDraftError] = useState<string | null>(null);
+
   const status = taskState?.status ?? 'idle';
   const isActive = status === 'running' || status === 'validating' || status === 'retrying';
 
@@ -89,12 +95,47 @@ export function AgentCard({
     if (status === 'error') setExpanded(true);
   }, [status]);
 
-  const updateInstruction = (idx: number, val: string) => {
-    const instructions = [...task.instructions]; instructions[idx] = val;
-    onUpdateTask({ ...task, instructions });
+  // Listen for "Draft with AI" response from the extension host
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      const msg = event.data as { type: string; payload?: unknown };
+      if (msg.type !== 'agent:instruction_drafted') return;
+      const p = msg.payload as { task_id: string; instruction?: string; error?: string };
+      if (p.task_id !== task.task_id) return;
+      setIsDraftLoading(false);
+      if (p.error) {
+        setDraftError(p.error);
+      } else if (p.instruction) {
+        onUpdateTask({ ...task, instructions: [p.instruction] });
+        setShowDraftPanel(false);
+        setDraftBrief('');
+        setDraftError(null);
+      }
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, [task, onUpdateTask]);
+
+  const handleDraftInstruction = () => {
+    if (!draftBrief.trim() || isDraftLoading) return;
+    setIsDraftLoading(true);
+    setDraftError(null);
+    postMessage({
+      type: 'agent:draft_instruction',
+      payload: {
+        task_id: task.task_id,
+        brief: draftBrief,
+        agent_name: agent.name,
+        persona: agent.persona,
+        task_name: task.task_name,
+      },
+    });
   };
-  const addInstruction = () => onUpdateTask({ ...task, instructions: [...task.instructions, ''] });
-  const removeInstruction = (idx: number) => onUpdateTask({ ...task, instructions: task.instructions.filter((_, i) => i !== idx) });
+
+  // Instructions are stored as string[] but edited as a single unified markdown document
+  const instructionText = task.instructions.join('\n\n');
+  const updateInstructions = (val: string) =>
+    onUpdateTask({ ...task, instructions: val ? [val] : [] });
 
   const updateConstraint = (idx: number, val: string) => {
     const constraints = [...task.constraints]; constraints[idx] = val;
@@ -243,19 +284,80 @@ export function AgentCard({
                 onChange={(e) => onUpdateTask({ ...task, task_name: e.target.value })} />
             </div>
 
-            {/* Instructions */}
+            {/* Instructions — single unified markdown document */}
             <div className="field-group">
-              <label className="field-label">{t('card.instructions')}</label>
-              {task.instructions.map((inst, idx) => (
-                <div key={idx} className="field-row" style={{ marginBottom: 4, alignItems: 'flex-start' }}>
-                  <span style={{ fontSize: 10, color: 'var(--aao-muted)', minWidth: 14, textAlign: 'right', paddingTop: 5 }}>{idx + 1}.</span>
-                  <textarea className="field-textarea field-input--grow" rows={2} value={inst}
-                    placeholder="Describe a specific task or action this agent should perform. Be as detailed as needed — multiple sentences are fine."
-                    onChange={(e) => updateInstruction(idx, e.target.value)} />
-                  <button className="card-mini-btn card-mini-btn--danger" style={{ marginTop: 2 }} onClick={() => removeInstruction(idx)}>✕</button>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                <label className="field-label" style={{ marginBottom: 0 }}>{t('card.instructions')}</label>
+                <button
+                  className="btn btn--ghost btn--xs"
+                  onClick={() => { setShowDraftPanel((v) => !v); setDraftError(null); }}
+                  title="Let AI draft detailed instructions from your brief description"
+                  style={{ fontSize: 11, gap: 3 }}
+                >
+                  ✨ {showDraftPanel ? 'Close Draft' : 'Draft with AI'}
+                </button>
+              </div>
+
+              {/* "Draft with AI" inline panel */}
+              {showDraftPanel && (
+                <div style={{
+                  background: 'var(--vscode-editor-inactiveSelectionBackground)',
+                  border: '1px solid var(--aao-border)',
+                  borderRadius: 6,
+                  padding: '10px 12px',
+                  marginBottom: 8,
+                }}>
+                  <div style={{ fontSize: 11, color: 'var(--aao-muted)', marginBottom: 6 }}>
+                    Describe what you want this agent to do in plain language. The AI will expand it into a full structured instruction document.
+                  </div>
+                  <textarea
+                    className="field-textarea"
+                    rows={4}
+                    value={draftBrief}
+                    placeholder={`E.g.: "Review the TypeScript file for type safety issues, performance anti-patterns, and missing error handling. For each issue found, provide the line number, severity (critical/major/minor), a clear explanation, and a concrete code fix suggestion. Prioritize critical issues first."`}
+                    onChange={(e) => setDraftBrief(e.target.value)}
+                    disabled={isDraftLoading}
+                    style={{ marginBottom: 6 }}
+                  />
+                  {draftError && (
+                    <div style={{ fontSize: 11, color: 'var(--vscode-errorForeground)', marginBottom: 6 }}>
+                      ⚠ {draftError}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <button
+                      className="btn btn--primary btn--sm"
+                      onClick={handleDraftInstruction}
+                      disabled={!draftBrief.trim() || isDraftLoading}
+                    >
+                      {isDraftLoading ? '⏳ Generating…' : '✨ Generate Instructions'}
+                    </button>
+                    {isDraftLoading && (
+                      <span style={{ fontSize: 11, color: 'var(--aao-muted)' }}>
+                        AI is writing detailed instructions…
+                      </span>
+                    )}
+                  </div>
                 </div>
-              ))}
-              <button className="btn-link" onClick={addInstruction}>＋ {t('card.addInstruction')}</button>
+              )}
+
+              <textarea
+                className="field-textarea"
+                rows={10}
+                value={instructionText}
+                placeholder={
+                  `Write the full task specification here. Markdown is supported.\n\n` +
+                  `## Objective\nWhat the agent should accomplish.\n\n` +
+                  `## Step-by-step Process\n1. First step\n2. Second step\n\n` +
+                  `## Output Requirements\nFormat, structure, and quality expected.\n\n` +
+                  `Tip: click "Draft with AI" to generate this from a brief description.`
+                }
+                onChange={(e) => updateInstructions(e.target.value)}
+                style={{ fontFamily: 'var(--vscode-editor-font-family, monospace)', fontSize: 12 }}
+              />
+              <div style={{ fontSize: 10, color: 'var(--aao-muted)', textAlign: 'right', marginTop: 2 }}>
+                {instructionText.length} chars · ~{Math.ceil(instructionText.length / 4)} tokens
+              </div>
             </div>
 
             {/* Constraints */}
@@ -265,11 +367,17 @@ export function AgentCard({
                 <div key={idx} className="field-row" style={{ marginBottom: 4, alignItems: 'flex-start' }}>
                   <textarea className="field-textarea field-input--grow" rows={2} value={c}
                     placeholder="Add a constraint or requirement. E.g.: 'Output must be valid JSON', 'Do not modify existing tests', 'Keep changes minimal'."
-                    onChange={(e) => updateConstraint(idx, e.target.value)} />
-                  <button className="card-mini-btn card-mini-btn--danger" style={{ marginTop: 2 }} onClick={() => removeConstraint(idx)}>✕</button>
+                    onChange={(e) => {
+                      const constraints = [...task.constraints]; constraints[idx] = e.target.value;
+                      onUpdateTask({ ...task, constraints });
+                    }} />
+                  <button className="card-mini-btn card-mini-btn--danger" style={{ marginTop: 2 }}
+                    onClick={() => onUpdateTask({ ...task, constraints: task.constraints.filter((_, i) => i !== idx) })}>✕</button>
                 </div>
               ))}
-              <button className="btn-link" onClick={addConstraint}>＋ {t('card.addConstraint')}</button>
+              <button className="btn-link" onClick={() => onUpdateTask({ ...task, constraints: [...task.constraints, ''] })}>
+                ＋ {t('card.addConstraint')}
+              </button>
             </div>
 
             {/* Input Mapping */}

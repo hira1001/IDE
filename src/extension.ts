@@ -289,6 +289,34 @@ async function handleWebviewMessage(
       break;
     }
 
+    case 'agent:draft_instruction': {
+      const payload = message.payload as {
+        task_id: string;
+        brief: string;
+        agent_name: string;
+        persona: string;
+        task_name: string;
+      };
+      try {
+        const apiKeys = await getApiKeys(context);
+        const cfg = vscode.workspace.getConfiguration('aiAgentOrchestrator');
+        const defaultModel = cfg.get<string>('defaultModel', 'gpt-4o') as import('./types/index.js').LLMModel;
+        const metaAI = new MetaAIService(apiKeys, defaultModel);
+        const activeFile = fileContextProvider.getActiveFileSnapshot();
+        const instruction = await metaAI.draftAgentInstruction(payload.brief, {
+          agentName: payload.agent_name,
+          persona: payload.persona,
+          taskName: payload.task_name,
+          fileName: activeFile?.filename,
+        });
+        postMessage({ type: 'agent:instruction_drafted', payload: { task_id: payload.task_id, instruction } });
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        postMessage({ type: 'agent:instruction_drafted', payload: { task_id: payload.task_id, error: errMsg } });
+      }
+      break;
+    }
+
     case 'workflow:execute_from': {
       const payload = message.payload as { config: WorkflowConfig; fromStep: number };
       if (currentOrchestrator) {
