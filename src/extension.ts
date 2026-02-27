@@ -262,7 +262,7 @@ async function handleWebviewMessage(
       // Create a temporary document with the new content for comparison
       const uriParts = doc.uri.path.split('/');
       const fileName = uriParts[uriParts.length - 1];
-      const tmpUri = vscode.Uri.parse(`untitled:AI_Suggested_${fileName}`);
+      const tmpUri = vscode.Uri.parse(`untitled:AI_Suggested_${fileName}_${Date.now()}`);
 
       // Open the untitled document with the suggested content
       const tmpDoc = await vscode.workspace.openTextDocument(tmpUri);
@@ -292,7 +292,12 @@ async function handleWebviewMessage(
     case 'workflow:execute_from': {
       const payload = message.payload as { config: WorkflowConfig; fromStep: number };
       if (currentOrchestrator) {
-        await currentOrchestrator.executeFrom(payload.config, payload.fromStep);
+        try {
+          await currentOrchestrator.executeFrom(payload.config, payload.fromStep);
+        } catch (err) {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          vscode.window.showErrorMessage(`Re-run failed: ${errMsg}`);
+        }
       }
       break;
     }

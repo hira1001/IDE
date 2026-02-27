@@ -297,6 +297,7 @@ export type WebviewMessageType =
   | 'template:save'
   | 'template:load'
   | 'template:list'
+  | 'template:open_selector'
   | 'template:export'
   | 'template:import'
   | 'config:update'

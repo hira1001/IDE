@@ -449,7 +449,7 @@ export class Orchestrator {
         if (
           isAbort ||
           attempt > maxRetries ||
-          (errMessage.includes('400') || errMessage.includes('401') || errMessage.includes('403')) && !errMessage.includes('429')
+          ((errMessage.includes('400') || errMessage.includes('401') || errMessage.includes('403')) && !errMessage.includes('429'))
         ) {
           throw err;
         }

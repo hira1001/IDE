@@ -231,7 +231,8 @@ export function AgentCard({
             {/* Persona */}
             <div className="field-group">
               <label className="field-label">{t('card.persona')}</label>
-              <textarea className="field-textarea" rows={2} value={agent.persona}
+              <textarea className="field-textarea" rows={5} value={agent.persona}
+                placeholder="Describe this agent's role, expertise, tone, and perspective. E.g.: 'You are a senior TypeScript engineer focused on clean, testable code. You prefer explicit types over inference and always consider edge cases.'"
                 onChange={(e) => onUpdateAgent({ ...agent, persona: e.target.value })} />
             </div>
 
@@ -246,11 +247,12 @@ export function AgentCard({
             <div className="field-group">
               <label className="field-label">{t('card.instructions')}</label>
               {task.instructions.map((inst, idx) => (
-                <div key={idx} className="field-row" style={{ marginBottom: 4 }}>
-                  <span style={{ fontSize: 10, color: 'var(--aao-muted)', minWidth: 14, textAlign: 'right' }}>{idx + 1}.</span>
-                  <input className="field-input field-input--grow" value={inst}
+                <div key={idx} className="field-row" style={{ marginBottom: 4, alignItems: 'flex-start' }}>
+                  <span style={{ fontSize: 10, color: 'var(--aao-muted)', minWidth: 14, textAlign: 'right', paddingTop: 5 }}>{idx + 1}.</span>
+                  <textarea className="field-textarea field-input--grow" rows={2} value={inst}
+                    placeholder="Describe a specific task or action this agent should perform. Be as detailed as needed — multiple sentences are fine."
                     onChange={(e) => updateInstruction(idx, e.target.value)} />
-                  <button className="card-mini-btn card-mini-btn--danger" onClick={() => removeInstruction(idx)}>✕</button>
+                  <button className="card-mini-btn card-mini-btn--danger" style={{ marginTop: 2 }} onClick={() => removeInstruction(idx)}>✕</button>
                 </div>
               ))}
               <button className="btn-link" onClick={addInstruction}>＋ {t('card.addInstruction')}</button>
@@ -260,10 +262,11 @@ export function AgentCard({
             <div className="field-group">
               <label className="field-label">{t('card.constraints')}</label>
               {task.constraints.map((c, idx) => (
-                <div key={idx} className="field-row" style={{ marginBottom: 4 }}>
-                  <input className="field-input field-input--grow" value={c}
+                <div key={idx} className="field-row" style={{ marginBottom: 4, alignItems: 'flex-start' }}>
+                  <textarea className="field-textarea field-input--grow" rows={2} value={c}
+                    placeholder="Add a constraint or requirement. E.g.: 'Output must be valid JSON', 'Do not modify existing tests', 'Keep changes minimal'."
                     onChange={(e) => updateConstraint(idx, e.target.value)} />
-                  <button className="card-mini-btn card-mini-btn--danger" onClick={() => removeConstraint(idx)}>✕</button>
+                  <button className="card-mini-btn card-mini-btn--danger" style={{ marginTop: 2 }} onClick={() => removeConstraint(idx)}>✕</button>
                 </div>
               ))}
               <button className="btn-link" onClick={addConstraint}>＋ {t('card.addConstraint')}</button>

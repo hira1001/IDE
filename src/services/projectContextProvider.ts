@@ -429,16 +429,19 @@ export class ProjectContextProvider {
   /**
    * Simple gitignore-style matching.
    * Handles: exact path, wildcards (*), directory indicators (/).
+   * Normalizes backslashes to forward slashes for Windows compatibility.
    */
   private isIgnored(relPath: string, patterns: string[]): boolean {
+    // Normalize to forward slashes so patterns always match on Windows too
+    const normalizedPath = relPath.replace(/\\/g, '/');
     for (const pattern of patterns) {
       const p = pattern.endsWith('/') ? pattern.slice(0, -1) : pattern;
       // Exact match or starts-with match for directory patterns
-      if (relPath === p || relPath.startsWith(p + '/')) return true;
+      if (normalizedPath === p || normalizedPath.startsWith(p + '/')) return true;
       // Simple wildcard: *.ext
-      if (p.startsWith('*') && relPath.endsWith(p.slice(1))) return true;
+      if (p.startsWith('*') && normalizedPath.endsWith(p.slice(1))) return true;
       // Name-only match (pattern without slashes matches any path segment)
-      if (!p.includes('/') && path.basename(relPath) === p) return true;
+      if (!p.includes('/') && path.basename(normalizedPath) === p) return true;
     }
     return false;
   }

@@ -33,14 +33,24 @@ export class OllamaAdapter implements LLMGateway {
 
     const url = `${this.endpointBase.replace(/\/$/, '')}/v1/chat/completions`;
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-      signal: this.abortController.signal,
-    });
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+        signal: this.abortController.signal,
+      });
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') throw err;
+      throw new Error(
+        `Cannot connect to Ollama at ${this.endpointBase}. ` +
+        `Make sure Ollama is running (\`ollama serve\`). ` +
+        `(${err instanceof Error ? err.message : String(err)})`
+      );
+    }
 
     if (!response.ok) {
       const err = await response.text();
