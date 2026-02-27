@@ -12,66 +12,119 @@ export function DryRunPanel({ result, onClose, onExecute }: DryRunPanelProps) {
   const { t } = useTranslation();
   const [expandedTask, setExpandedTask] = useState<string | null>(null);
 
+  const totalTasks = result.steps.reduce((sum, s) => sum + s.tasks.length, 0);
+
   return (
-    <div className="panel-overlay">
-      <div className="dry-run-panel">
-        <h2>{t('dryrun.title')}</h2>
-
-        {result.steps.map((step) => (
-          <div key={step.step} className="dry-run-step">
-            <div className="dry-run-step__header">
-              ── Step {step.step} ({step.type}) ──
+    <div className="panel-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="panel-card dry-run-panel">
+        {/* Header */}
+        <div className="panel-card__header">
+          <div className="panel-card__header-left">
+            <div className="panel-card__icon panel-card__icon--blue">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5"/>
+                <path d="M8 4.5v4l2.5 1.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+              </svg>
             </div>
-            {step.tasks.map((task) => (
-              <div key={task.task_id} className="dry-run-task">
-                <div
-                  className="dry-run-task__header"
-                  onClick={() => setExpandedTask(expandedTask === task.task_id ? null : task.task_id)}
-                >
-                  📄 {task.task_name} ({task.agent_name} / {task.model})
-                  <span className="dry-run-task__tokens">
-                    ~{task.estimated_input_tokens.toLocaleString()} tokens input
-                  </span>
-                  <span className="dry-run-task__expand">
-                    {expandedTask === task.task_id ? '▲' : '▼'} プレビュー
-                  </span>
-                </div>
-                {expandedTask === task.task_id && (
-                  <div className="dry-run-task__preview">
-                    <strong>System Prompt:</strong>
-                    <pre>{task.system_prompt.slice(0, 500)}{task.system_prompt.length > 500 ? '…' : ''}</pre>
-                    <strong>User Prompt:</strong>
-                    <pre>{task.user_prompt.slice(0, 300)}{task.user_prompt.length > 300 ? '…' : ''}</pre>
-                  </div>
-                )}
-              </div>
-            ))}
+            <div>
+              <h2 className="panel-card__title">{t('dryrun.title')}</h2>
+              <p className="panel-card__subtitle">{totalTasks} tasks · {result.providers.join(', ')}</p>
+            </div>
           </div>
-        ))}
+          <button className="panel-card__close" onClick={onClose} aria-label="Close">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+            </svg>
+          </button>
+        </div>
 
+        {/* Summary stats */}
         <div className="dry-run-summary">
-          <div className="dry-run-summary__row">
-            <span>📊 {t('dryrun.estimatedTokens')}:</span>
-            <span>
-              ~{result.total_min_tokens.toLocaleString()} ({t('dryrun.min')}) /
-              ~{result.total_max_tokens.toLocaleString()} ({t('dryrun.max')})
+          <div className="dry-run-summary__stat">
+            <span className="dry-run-summary__label">{t('dryrun.estimatedTokens')}</span>
+            <span className="dry-run-summary__value">
+              ~{result.total_min_tokens.toLocaleString()}
+              <span className="dry-run-summary__range">–{result.total_max_tokens.toLocaleString()}</span>
             </span>
           </div>
-          <div className="dry-run-summary__row">
-            <span>💰 {t('dryrun.estimatedCost')}:</span>
-            <span>
-              ${result.estimated_min_cost_usd.toFixed(4)} ~ ${result.estimated_max_cost_usd.toFixed(4)}
+          <div className="dry-run-summary__divider" />
+          <div className="dry-run-summary__stat">
+            <span className="dry-run-summary__label">{t('dryrun.estimatedCost')}</span>
+            <span className="dry-run-summary__value dry-run-summary__value--cost">
+              ${result.estimated_min_cost_usd.toFixed(4)}
+              <span className="dry-run-summary__range">–${result.estimated_max_cost_usd.toFixed(4)}</span>
             </span>
           </div>
-          <div className="dry-run-summary__row">
-            <span>⚡ {t('dryrun.providers')}:</span>
-            <span>{result.providers.join(', ')}</span>
+          <div className="dry-run-summary__divider" />
+          <div className="dry-run-summary__stat">
+            <span className="dry-run-summary__label">{t('dryrun.providers')}</span>
+            <span className="dry-run-summary__value">{result.providers.join(', ')}</span>
           </div>
         </div>
 
-        <div className="dry-run-panel__actions">
-          <button className="btn btn--secondary" onClick={onClose}>{t('dryrun.close')}</button>
-          <button className="btn btn--primary" onClick={onExecute}>{t('dryrun.executeNow')}</button>
+        {/* Step / task list */}
+        <div className="dry-run-steps">
+          {result.steps.map((step) => (
+            <div key={step.step} className="dry-run-step">
+              <div className="dry-run-step__header">
+                <span className={`step-type-badge step-type-badge--${step.type}`}>{step.type}</span>
+                <span className="dry-run-step__label">Step {step.step}</span>
+                <span className="dry-run-step__count">{step.tasks.length} task{step.tasks.length !== 1 ? 's' : ''}</span>
+              </div>
+
+              {step.tasks.map((task) => (
+                <div key={task.task_id} className="dry-run-task">
+                  <button
+                    className="dry-run-task__header"
+                    onClick={() => setExpandedTask(expandedTask === task.task_id ? null : task.task_id)}
+                    aria-expanded={expandedTask === task.task_id}
+                  >
+                    <span className="dry-run-task__name">{task.task_name}</span>
+                    <span className="dry-run-task__meta">
+                      <span className="dry-run-task__model-badge">{task.model}</span>
+                      <span className="dry-run-task__tokens">
+                        ~{task.estimated_input_tokens.toLocaleString()} tok
+                      </span>
+                    </span>
+                    <svg
+                      className={`dry-run-task__chevron${expandedTask === task.task_id ? ' dry-run-task__chevron--open' : ''}`}
+                      width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"
+                    >
+                      <path d="M3.5 5.5L7 9l3.5-3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </button>
+
+                  {expandedTask === task.task_id && (
+                    <div className="dry-run-task__preview">
+                      <div className="dry-run-task__prompt-section">
+                        <div className="dry-run-task__prompt-label">System</div>
+                        <pre className="dry-run-task__prompt-text">
+                          {task.system_prompt.slice(0, 500)}{task.system_prompt.length > 500 ? '…' : ''}
+                        </pre>
+                      </div>
+                      <div className="dry-run-task__prompt-section">
+                        <div className="dry-run-task__prompt-label">User</div>
+                        <pre className="dry-run-task__prompt-text">
+                          {task.user_prompt.slice(0, 300)}{task.user_prompt.length > 300 ? '…' : ''}
+                        </pre>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+
+        {/* Footer actions */}
+        <div className="panel-card__footer">
+          <button className="btn btn--ghost" onClick={onClose}>{t('dryrun.close')}</button>
+          <button className="btn btn--primary" onClick={onExecute}>
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+              <path d="M2.5 2l9 4.5-9 4.5V2z" fill="currentColor"/>
+            </svg>
+            {t('dryrun.executeNow')}
+          </button>
         </div>
       </div>
     </div>

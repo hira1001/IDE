@@ -15,112 +15,93 @@ interface StepBlockProps {
   onRetryTask: (taskId: string) => void;
 }
 
+const STEP_TYPE_LABELS: Record<WorkflowStep['type'], string> = {
+  parallel: 'Parallel', sequential: 'Sequential', conditional: 'Conditional',
+};
+
 export function StepBlock({
-  step,
-  stepIndex,
-  config,
-  taskStates,
-  outputStore,
-  onUpdateStep,
-  onDeleteStep,
-  onRetryTask,
+  step, stepIndex, config, taskStates, outputStore,
+  onUpdateStep, onDeleteStep, onRetryTask,
 }: StepBlockProps) {
   const { t } = useTranslation();
 
-  const stepTypeLabel: Record<WorkflowStep['type'], string> = {
-    parallel: t('step.parallel'),
-    sequential: t('step.sequential'),
-    conditional: t('step.conditional'),
-  };
+  // Compute aggregate step status for styling
+  const tasks = step.tasks;
+  const allDone = tasks.length > 0 && tasks.every((t) => taskStates[t.task_id]?.status === 'completed');
+  const anyRunning = tasks.some((t) => ['running','validating','retrying'].includes(taskStates[t.task_id]?.status ?? ''));
+  const anyError = tasks.some((t) => taskStates[t.task_id]?.status === 'error');
+
+  const stepClass = allDone ? 'step-block--done' : anyError ? 'step-block--error' : anyRunning ? 'step-block--active' : '';
 
   const updateTask = (taskId: string, updatedTask: Task) => {
-    const tasks = step.tasks.map((t) => (t.task_id === taskId ? updatedTask : t));
-    onUpdateStep({ ...step, tasks });
+    onUpdateStep({ ...step, tasks: step.tasks.map((t) => (t.task_id === taskId ? updatedTask : t)) });
   };
 
   const updateAgent = (agentId: string, updatedAgent: Agent) => {
-    // Update agent in config at parent level — we emit a full step update
-    // The parent (PipelineView) handles agent updates from the full config context
-    // For simplicity, we trigger via a custom event on the step to signal parent
     const event = new CustomEvent('aao:update-agent', { detail: { agentId, updatedAgent }, bubbles: true });
     document.dispatchEvent(event);
   };
 
   const deleteTask = (taskId: string) => {
-    const tasks = step.tasks.filter((t) => t.task_id !== taskId);
-    onUpdateStep({ ...step, tasks });
+    onUpdateStep({ ...step, tasks: step.tasks.filter((t) => t.task_id !== taskId) });
   };
 
   const addTask = () => {
     const newAgentId = `agent_${uuidv4().slice(0, 6)}`;
-    const newTaskId = `task_${uuidv4().slice(0, 6)}`;
-
-    // Notify parent to add agent
-    const event = new CustomEvent('aao:add-agent', {
-      detail: {
-        agent: {
-          id: newAgentId,
-          name: 'New Agent',
-          persona: 'A helpful AI assistant.',
-          model: 'gpt-4o',
-        },
-      },
+    const newTaskId  = `task_${uuidv4().slice(0, 6)}`;
+    document.dispatchEvent(new CustomEvent('aao:add-agent', {
+      detail: { agent: { id: newAgentId, name: 'New Agent', persona: 'A helpful AI assistant.', model: 'gpt-4o' } },
       bubbles: true,
-    });
-    document.dispatchEvent(event);
-
+    }));
     const newTask: Task = {
-      task_id: newTaskId,
-      agent_id: newAgentId,
-      task_name: 'New Task',
-      instructions: [''],
-      constraints: [],
-      output_format: 'Markdown',
-      output_key: `output_${newTaskId}`,
+      task_id: newTaskId, agent_id: newAgentId, task_name: 'New Task',
+      instructions: [''], constraints: [], output_format: 'Markdown',
+      output_key: `out_${newTaskId}`,
       input_mapping: [{ from_step: 0, from_agent_id: '__source__', label: 'Source file' }],
       enable_handover_note: false,
     };
-
     onUpdateStep({ ...step, tasks: [...step.tasks, newTask] });
   };
 
   const isParallel = step.type === 'parallel';
-  const stepHasError = step.tasks.some((t) => taskStates[t.task_id]?.status === 'error');
+  const typeLabel = t(`step.${step.type}`, STEP_TYPE_LABELS[step.type]);
+  const pauseActive = step.pause_after;
 
   return (
-    <div className={`step-block step-block--${step.type} ${stepHasError ? 'step-block--error' : ''}`}>
-      {/* Step Header */}
+    <div className={`step-block step-block--${step.type} ${stepClass}`}>
+      {/* Header */}
       <div className="step-block__header">
         <span className="step-block__number">Step {stepIndex + 1}</span>
+
+        <div className={`step-block__type-pill`}>{typeLabel}</div>
 
         <select
           className="step-block__type-select"
           value={step.type}
           onChange={(e) => onUpdateStep({ ...step, type: e.target.value as WorkflowStep['type'] })}
         >
-          <option value="parallel">{t('step.parallel')}</option>
-          <option value="sequential">{t('step.sequential')}</option>
-          <option value="conditional">{t('step.conditional')}</option>
+          <option value="parallel">Parallel</option>
+          <option value="sequential">Sequential</option>
+          <option value="conditional">Conditional</option>
         </select>
 
-        <span className="step-block__type-badge">{stepTypeLabel[step.type]}</span>
-
-        <label className="step-block__pause-toggle">
-          <input
-            type="checkbox"
-            checked={step.pause_after}
-            onChange={(e) => onUpdateStep({ ...step, pause_after: e.target.checked })}
-          />
-          {' '}⏸ {t('step.pauseAfter')}
-        </label>
-
         {step.type === 'conditional' && step.condition && (
-          <span className="step-block__condition-badge">
-            ✓={step.condition.pass_keyword} ✗→Step{step.on_fail_goto}
+          <span className="step-block__cond-badge">
+            ✓ {step.condition.pass_keyword} / ✗→Step{step.on_fail_goto ?? '?'}
           </span>
         )}
 
-        <button className="step-block__delete" onClick={onDeleteStep} title={t('step.deleteStep')}>
+        <label className={`step-block__pause-toggle ${pauseActive ? 'step-block__pause-toggle--active' : ''}`}>
+          <input
+            type="checkbox"
+            checked={pauseActive}
+            onChange={(e) => onUpdateStep({ ...step, pause_after: e.target.checked })}
+            style={{ marginRight: 4 }}
+          />
+          ⏸ {t('step.pauseAfter')}
+        </label>
+
+        <button className="step-block__btn-delete" onClick={onDeleteStep} title={t('step.deleteStep')}>
           🗑️
         </button>
       </div>
@@ -130,7 +111,6 @@ export function StepBlock({
         {step.tasks.map((task) => {
           const agent = config.agents.find((a) => a.id === task.agent_id);
           if (!agent) return null;
-
           return (
             <AgentCard
               key={task.task_id}
@@ -138,24 +118,21 @@ export function StepBlock({
               task={task}
               taskState={taskStates[task.task_id]}
               output={outputStore[task.output_key]}
-              config={config}
-              onUpdateAgent={(updatedAgent) => updateAgent(agent.id, updatedAgent)}
-              onUpdateTask={(updatedTask) => updateTask(task.task_id, updatedTask)}
+              onUpdateAgent={(a) => updateAgent(agent.id, a)}
+              onUpdateTask={(t) => updateTask(task.task_id, t)}
               onRetry={() => onRetryTask(task.task_id)}
               onDelete={() => deleteTask(task.task_id)}
             />
           );
         })}
 
-        <button className="btn-add-card" onClick={addTask}>
-          {t('step.addCard')}
-        </button>
+        <button className="btn-add-card" onClick={addTask}>＋ {t('step.addCard')}</button>
       </div>
 
-      {/* Conditional goto indicator */}
+      {/* Loop goto hint */}
       {step.then_goto !== undefined && (
-        <div className="step-block__goto">
-          ↩️ → Step {step.then_goto}
+        <div className="step-block__goto-hint">
+          ↩️ On pass → Step {step.then_goto}
         </div>
       )}
     </div>

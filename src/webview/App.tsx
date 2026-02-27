@@ -29,7 +29,6 @@ export function App() {
     loadTemplates,
     setConfig,
     clearDryRun,
-    postMessage,
   } = useWorkflowState();
 
   const [instruction, setInstruction] = useState('');
@@ -79,7 +78,6 @@ export function App() {
 
   const handleContinueFromPause = (editedOutputs: Record<string, string>) => {
     if (!executionState) return;
-    // Apply manual edits
     for (const [key, content] of Object.entries(editedOutputs)) {
       manualEditOutput(key, content, executionState.current_step);
     }
@@ -99,14 +97,56 @@ export function App() {
 
   return (
     <div className="app">
-      {/* Header */}
-      <div className="app__header">
-        <h1 className="app__title">🤖 {t('app.title')}</h1>
-      </div>
+      {/* ── Header ─────────────────────────────── */}
+      <header className="app__header">
+        <div className="app__header-brand">
+          <div className="app__logo" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+              <circle cx="10" cy="10" r="9" stroke="url(#logoGrad)" strokeWidth="1.5"/>
+              <circle cx="10" cy="6.5" r="2.5" fill="url(#logoGrad)"/>
+              <path d="M5.5 15c0-2.49 2.01-4.5 4.5-4.5s4.5 2.01 4.5 4.5" stroke="url(#logoGrad)" strokeWidth="1.5" strokeLinecap="round"/>
+              <defs>
+                <linearGradient id="logoGrad" x1="2" y1="2" x2="18" y2="18" gradientUnits="userSpaceOnUse">
+                  <stop stopColor="#818cf8"/>
+                  <stop offset="1" stopColor="#38bdf8"/>
+                </linearGradient>
+              </defs>
+            </svg>
+          </div>
+          <h1 className="app__title">{t('app.title')}</h1>
+        </div>
 
-      {/* Chat Input */}
+        <div className="app__header-actions">
+          <button
+            className="btn btn--icon-only"
+            onClick={handleOpenTemplates}
+            title={t('app.loadTemplate')}
+            aria-label={t('app.loadTemplate')}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M2 3.5C2 2.67 2.67 2 3.5 2h3l2 2h4c.83 0 1.5.67 1.5 1.5v7c0 .83-.67 1.5-1.5 1.5h-9.5C2.67 14 2 13.33 2 12.5v-9z" stroke="currentColor" strokeWidth="1.4"/>
+            </svg>
+          </button>
+          {config && (
+            <button
+              className="btn btn--icon-only"
+              onClick={() => setShowSaveDialog(true)}
+              title={t('app.saveTemplate')}
+              aria-label={t('app.saveTemplate')}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M3 3h8l2 2v8H3V3z" stroke="currentColor" strokeWidth="1.4"/>
+                <rect x="5.5" y="3" width="4" height="3.5" rx="0.5" stroke="currentColor" strokeWidth="1.2"/>
+                <path d="M5 10h6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+              </svg>
+            </button>
+          )}
+        </div>
+      </header>
+
+      {/* ── Chat / MetaAI input ─────────────────── */}
       <div className="app__chat">
-        <div className="chat-input-row">
+        <div className="chat-input-wrapper">
           <textarea
             className="chat-input"
             placeholder={t('app.chatPlaceholder')}
@@ -114,51 +154,69 @@ export function App() {
             onChange={(e) => setInstruction(e.target.value)}
             onKeyDown={handleKeyDown}
             rows={2}
+            disabled={isGenerating}
           />
-          <div className="chat-input-buttons">
-            <button
-              className="btn btn--icon"
-              onClick={handleOpenTemplates}
-              title={t('app.loadTemplate')}
-            >
-              📂
-            </button>
-            {config && (
-              <button
-                className="btn btn--icon"
-                onClick={() => setShowSaveDialog(true)}
-                title={t('app.saveTemplate')}
-              >
-                💾
-              </button>
+          <button
+            className={`chat-send-btn${isGenerating ? ' chat-send-btn--loading' : ''}`}
+            onClick={handleGenerate}
+            disabled={isGenerating || !instruction.trim()}
+            aria-label={t('app.generate')}
+          >
+            {isGenerating ? (
+              <span className="chat-send-btn__spinner" />
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M14 8L2 2l3 6-3 6 12-6z" fill="currentColor"/>
+              </svg>
             )}
-            <button
-              className="btn btn--primary"
-              onClick={handleGenerate}
-              disabled={isGenerating || !instruction.trim()}
-            >
-              {isGenerating ? '⟳' : t('app.generate')}
-            </button>
-          </div>
+          </button>
+        </div>
+        <div className="chat-input-hint">
+          <kbd>Ctrl</kbd>+<kbd>Enter</kbd> to generate
         </div>
 
+        {isGenerating && (
+          <div className="generating-indicator" role="status">
+            <div className="generating-indicator__dots">
+              <span /><span /><span />
+            </div>
+            <span className="generating-indicator__text">{t('app.generating') || 'Generating workflow…'}</span>
+          </div>
+        )}
+
         {generationError && (
-          <div className="error-message">⚠️ {generationError}</div>
+          <div className="error-message" role="alert">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+              <circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.3"/>
+              <path d="M7 4.5v3M7 9.5v.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+            </svg>
+            {generationError}
+          </div>
         )}
       </div>
 
-      {/* Source Indicator */}
+      {/* ── Source indicator ────────────────────── */}
       {source ? (
         <div className="source-indicator">
-          📎 {t('app.sourceIndicator')}: {source.filename} ({source.language_id}, {source.line_count} lines)
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+            <path d="M2 2h7l2 2v7H2V2z" stroke="currentColor" strokeWidth="1.3"/>
+            <path d="M5 5.5h3M5 7.5h2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+          </svg>
+          <span className="source-indicator__name">{source.filename}</span>
+          <span className="source-indicator__meta">{source.language_id}</span>
+          <span className="source-indicator__meta">{source.line_count.toLocaleString()} lines</span>
         </div>
       ) : (
         <div className="source-indicator source-indicator--empty">
-          ⚠️ {t('app.noSource')}
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+            <circle cx="6.5" cy="6.5" r="5.5" stroke="currentColor" strokeWidth="1.3"/>
+            <path d="M6.5 4v3.5M6.5 9v.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+          </svg>
+          {t('app.noSource')}
         </div>
       )}
 
-      {/* Pipeline */}
+      {/* ── Pipeline ────────────────────────────── */}
       {config && (
         <PipelineView
           config={config}
@@ -169,7 +227,25 @@ export function App() {
         />
       )}
 
-      {/* Execution Bar (sticky) */}
+      {!config && !isGenerating && (
+        <div className="empty-state">
+          <div className="empty-state__icon" aria-hidden="true">
+            <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+              <circle cx="24" cy="24" r="22" stroke="currentColor" strokeWidth="1.5" opacity="0.2"/>
+              <circle cx="24" cy="18" r="6" stroke="currentColor" strokeWidth="1.5" opacity="0.5"/>
+              <path d="M12 38c0-6.63 5.37-12 12-12s12 5.37 12 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" opacity="0.5"/>
+              <circle cx="38" cy="16" r="4" stroke="currentColor" strokeWidth="1.2" opacity="0.3"/>
+              <path d="M35 23c0-3.31 2.69-6 6-6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" opacity="0.3"/>
+              <circle cx="10" cy="16" r="4" stroke="currentColor" strokeWidth="1.2" opacity="0.3"/>
+              <path d="M7 23c0-3.31 2.69-6 6-6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" opacity="0.3" transform="scale(-1,1) translate(-20,0)"/>
+            </svg>
+          </div>
+          <p className="empty-state__text">{t('app.emptyState') || 'Describe your workflow above to get started'}</p>
+          <p className="empty-state__sub">{t('app.emptyStateSub') || 'or load an existing template'}</p>
+        </div>
+      )}
+
+      {/* ── Execution Bar (sticky footer) ──────── */}
       {config && (
         <ExecutionBar
           status={status}
@@ -183,7 +259,7 @@ export function App() {
         />
       )}
 
-      {/* Dry Run Panel */}
+      {/* ── Overlay panels ───────────────────── */}
       {dryRunResult && (
         <DryRunPanel
           result={dryRunResult}
@@ -192,7 +268,6 @@ export function App() {
         />
       )}
 
-      {/* Breakpoint Panel */}
       {pausedOutputs && (
         <BreakpointPanel
           stepNumber={executionState?.current_step ?? 0}
@@ -202,7 +277,6 @@ export function App() {
         />
       )}
 
-      {/* Template Save Dialog */}
       {showSaveDialog && config && (
         <TemplateSaveDialog
           config={config}
@@ -210,7 +284,6 @@ export function App() {
         />
       )}
 
-      {/* Template Selector */}
       {showTemplateSelector && (
         <TemplateSelector
           templates={templates}
