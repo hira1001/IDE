@@ -309,7 +309,8 @@ export type WebviewMessageType =
   | 'output:apply'
   | 'clipboard:write'
   | 'agent:draft_instruction'
-  | 'agent:instruction_drafted';
+  | 'agent:instruction_drafted'
+  | 'webview:ready';
 
 export interface WebviewMessage {
   type: WebviewMessageType;

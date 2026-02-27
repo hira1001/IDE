@@ -105,14 +105,8 @@ function openOrFocusPanel(
     currentOrchestrator = undefined;
   });
 
-  // Restore last execution state if available
-  const savedState = context.globalState.get<SerializedExecutionState>('lastExecutionState');
-  if (savedState && (savedState.status === 'completed' || savedState.status === 'error')) {
-    // Delay slightly to ensure webview is ready
-    setTimeout(() => {
-      postMessage({ type: 'status:update', payload: { execution_state: savedState } });
-    }, 500);
-  }
+  // Saved state is sent once the webview signals it's ready (see 'webview:ready' handler below).
+  // This avoids the race condition of postMessage() arriving before React has mounted.
 
   // Handle messages from Webview
   currentPanel.webview.onDidReceiveMessage(
@@ -134,6 +128,15 @@ async function handleWebviewMessage(
   templateManager: TemplateManager
 ): Promise<void> {
   switch (message.type) {
+    case 'webview:ready': {
+      // Webview is mounted and listening — now safe to restore saved execution state.
+      const savedState = context.globalState.get<SerializedExecutionState>('lastExecutionState');
+      if (savedState && (savedState.status === 'completed' || savedState.status === 'error')) {
+        postMessage({ type: 'status:update', payload: { execution_state: savedState } });
+      }
+      break;
+    }
+
     case 'source:get': {
       // Legacy: return active file only
       const source = fileContextProvider.getActiveFileSnapshot();

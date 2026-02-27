@@ -101,8 +101,10 @@ export function useWorkflowState() {
     return () => window.removeEventListener('message', handler);
   }, [postMessage]);
 
-  // Fetch project context on mount (includes active file info)
+  // On mount: signal readiness to the extension host (triggers saved-state restoration),
+  // then request context data.
   useEffect(() => {
+    postMessage({ type: 'webview:ready' });
     postMessage({ type: 'context:get' });
     postMessage({ type: 'source:get' }); // legacy — kept for backward compat
   }, [postMessage]);

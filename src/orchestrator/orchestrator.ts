@@ -38,6 +38,8 @@ export class Orchestrator {
   private readonly conditionEvaluator: ConditionEvaluator;
   private readonly abortManager: AbortManager;
   private readonly timeout: number;
+  /** Tracks all in-flight LLM gateways so abort() can cancel active fetch calls. */
+  private readonly activeGateways: Map<string, ReturnType<typeof getGateway>> = new Map();
 
   constructor(private readonly options: OrchestratorOptions) {
     this.stateManager = new StateManager();
@@ -89,6 +91,10 @@ export class Orchestrator {
   }
 
   abort(): void {
+    // Abort all in-flight LLM fetch calls via their gateway's internal AbortController
+    for (const gateway of this.activeGateways.values()) {
+      gateway.abort();
+    }
     this.abortManager.abortAll();
     this.stateManager.setStatus('aborted');
     this.emit();
@@ -117,8 +123,15 @@ export class Orchestrator {
    * Does NOT reset stateManager — reuses existing output_store.
    */
   async executeFrom(config: WorkflowConfig, fromStepIndex: number): Promise<void> {
-    // Reinitialize only the tasks from fromStepIndex onwards
+    if (fromStepIndex >= config.workflow.length) {
+      throw new Error(
+        `executeFrom: fromStepIndex ${fromStepIndex} is out of bounds (workflow has ${config.workflow.length} steps).`
+      );
+    }
+
+    // Reinitialize task states and loop counters for all steps from fromStepIndex onwards
     for (let i = fromStepIndex; i < config.workflow.length; i++) {
+      this.stateManager.resetLoopCount(config.workflow[i].step);
       for (const task of config.workflow[i].tasks) {
         this.stateManager.initTaskState(task.task_id);
       }
@@ -223,13 +236,11 @@ export class Orchestrator {
       return this.runTask(task, agent, step.step, config, promptBuilder);
     });
 
-    const results = await Promise.allSettled(tasks);
+    await Promise.allSettled(tasks);
 
-    // Log if any tasks in the parallel group failed unexpectedly
-    const failures = results.filter((r) => r.status === 'rejected');
-    if (failures.length > 0) {
-      console.warn(`[Orchestrator] ${failures.length} tasks failed in parallel step ${step.step}`);
-    }
+    // Check if abort was triggered while parallel tasks were running
+    // (runTask handles individual errors internally; we check global abort here)
+    if (this.stateManager.getStatus() === 'aborted') return;
   }
 
   private async runSequentialStep(
@@ -311,6 +322,8 @@ export class Orchestrator {
 
     try {
       const gateway = getGateway(agent.model, this.options.apiKeys);
+      // Register so abort() can cancel this in-flight request
+      this.activeGateways.set(taskId, gateway);
       const start = Date.now();
 
       let response = await this.callWithRetry(
@@ -388,6 +401,8 @@ export class Orchestrator {
         this.stateManager.setTaskError(taskId, message);
         this.stateManager.log(stepNumber, taskId, 'error', message);
       }
+    } finally {
+      this.activeGateways.delete(taskId);
     }
 
     this.emit();
