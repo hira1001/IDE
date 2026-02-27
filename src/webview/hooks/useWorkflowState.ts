@@ -7,6 +7,7 @@ import {
   SourceInput,
   WorkflowTemplate,
   DryRunResult,
+  ProjectContextSummary,
 } from '../../types/index.js';
 import { useVSCode } from './useVSCode.js';
 
@@ -14,6 +15,7 @@ interface WorkflowState {
   config: WorkflowConfig | null;
   executionState: SerializedExecutionState | null;
   source: SourceInput | null;
+  contextSummary: ProjectContextSummary | null;
   templates: WorkflowTemplate[];
   dryRunResult: DryRunResult | null;
   isGenerating: boolean;
@@ -24,6 +26,7 @@ const INITIAL_STATE: WorkflowState = {
   config: null,
   executionState: null,
   source: null,
+  contextSummary: null,
   templates: [],
   dryRunResult: null,
   isGenerating: false,
@@ -47,6 +50,12 @@ export function useWorkflowState() {
         case 'source:get': {
           const p = message.payload as { source: SourceInput | null };
           setState((s) => ({ ...s, source: p.source }));
+          break;
+        }
+
+        case 'context:get': {
+          const p = message.payload as { summary: ProjectContextSummary };
+          setState((s) => ({ ...s, contextSummary: p.summary }));
           break;
         }
 
@@ -92,9 +101,10 @@ export function useWorkflowState() {
     return () => window.removeEventListener('message', handler);
   }, [postMessage]);
 
-  // Fetch source on mount
+  // Fetch project context on mount (includes active file info)
   useEffect(() => {
-    postMessage({ type: 'source:get' });
+    postMessage({ type: 'context:get' });
+    postMessage({ type: 'source:get' }); // legacy — kept for backward compat
   }, [postMessage]);
 
   const generateWorkflow = useCallback(
@@ -195,6 +205,17 @@ export function useWorkflowState() {
     setState((s) => ({ ...s, dryRunResult: null }));
   }, []);
 
+  const setContextMode = useCallback(
+    (mode: 'file' | 'project') => {
+      postMessage({ type: 'context:set_mode', payload: { mode } });
+    },
+    [postMessage]
+  );
+
+  const refreshContext = useCallback(() => {
+    postMessage({ type: 'context:get' });
+  }, [postMessage]);
+
   return {
     ...state,
     generateWorkflow,
@@ -207,6 +228,8 @@ export function useWorkflowState() {
     loadTemplates,
     setConfig,
     clearDryRun,
+    setContextMode,
+    refreshContext,
     postMessage,
     undo,
     redo,

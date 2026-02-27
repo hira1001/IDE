@@ -109,7 +109,7 @@ export function AgentCard({
     onUpdateTask({ ...task, input_mapping: mappings });
   };
   const addMapping = () => {
-    const newMapping: InputSource = { from_step: 0, from_agent_id: '__source__', label: 'Source file' };
+    const newMapping: InputSource = { from_step: 0, from_agent_id: '__project__', label: 'Project context' };
     onUpdateTask({ ...task, input_mapping: [...task.input_mapping, newMapping] });
   };
   const removeMapping = (idx: number) =>
@@ -117,7 +117,9 @@ export function AgentCard({
 
   // Build available output sources from config (all other tasks)
   const availableSources: Array<{ value: string; label: string; from_step: number; from_agent_id: string }> = [
-    { value: '__source__', label: 'Source File', from_step: 0, from_agent_id: '__source__' },
+    { value: '__source__', label: 'Active File', from_step: 0, from_agent_id: '__source__' },
+    { value: '__project__', label: 'Project Context (tree + files)', from_step: 0, from_agent_id: '__project__' },
+    { value: '__tree__', label: 'File Tree Only', from_step: 0, from_agent_id: '__tree__' },
   ];
   if (config) {
     for (const step of config.workflow) {

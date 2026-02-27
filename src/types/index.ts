@@ -79,6 +79,64 @@ export interface SourceInput {
   byte_size: number;
 }
 
+// ─── Project Context (whole-project understanding) ────────────────────────────
+
+/** A single file included in the project context (not the active file). */
+export interface ContextFile {
+  /** Path relative to the workspace root. */
+  relativePath: string;
+  content: string;
+  language_id: string;
+  line_count: number;
+  byte_size: number;
+  /** Why this file was selected. */
+  reason: 'imported' | 'config' | 'same_dir';
+}
+
+export interface ProjectMeta {
+  /** package.json name or workspace folder name. */
+  name: string;
+  primaryLanguage: string;
+  /** Detected from package.json dependencies (react, vue, next, etc.). */
+  framework?: string;
+  /** Total file count after gitignore filtering. */
+  totalFiles: number;
+}
+
+/**
+ * Rich context built from the entire workspace.
+ * Passed from the extension host to the Orchestrator.
+ */
+export interface ProjectContext {
+  mode: 'file' | 'project';
+  /** Compact indented tree of all non-ignored files. */
+  fileTree: string;
+  /** Content of the currently active editor file (may be null if no editor open). */
+  activeFile: SourceInput | null;
+  /** Related files selected by import analysis + token budget. */
+  relatedFiles: ContextFile[];
+  meta: ProjectMeta;
+  /** Estimated total token count for this context payload. */
+  tokenEstimate: number;
+}
+
+export interface ProjectContextOptions {
+  mode: 'file' | 'project';
+  /** Max tokens to spend on relatedFiles (default: 32000). */
+  tokenBudget: number;
+}
+
+/** Lightweight summary sent to the webview (no file content). */
+export interface ProjectContextSummary {
+  mode: 'file' | 'project';
+  activeFilename: string | null;
+  relatedFilePaths: string[];
+  totalFiles: number;
+  primaryLanguage: string;
+  framework?: string;
+  tokenEstimate: number;
+}
+
 // ─── Handover Note ────────────────────────────────────────────────────────────
 
 export interface HandoverNote {
@@ -242,6 +300,8 @@ export type WebviewMessageType =
   | 'template:import'
   | 'config:update'
   | 'source:get'
+  | 'context:get'
+  | 'context:set_mode'
   | 'output:open_tab'
   | 'output:save'
   | 'clipboard:write';
@@ -313,9 +373,19 @@ export interface ConfigUpdatePayload {
   value: unknown;
 }
 
-// source:get response
+// source:get response (legacy — kept for backward compat)
 export interface SourceGetPayload {
   source: SourceInput | null;
+}
+
+// context:get response
+export interface ContextGetPayload {
+  summary: ProjectContextSummary;
+}
+
+// context:set_mode payload
+export interface ContextSetModePayload {
+  mode: 'file' | 'project';
 }
 
 // output:open_tab payload

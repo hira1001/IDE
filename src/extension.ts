@@ -5,6 +5,7 @@ import { validateWorkflow } from './orchestrator/validator.js';
 import { MetaAIService } from './services/metaAIService.js';
 import { TemplateManager } from './services/templateManager.js';
 import { FileContextProvider } from './services/fileContextProvider.js';
+import { ProjectContextProvider } from './services/projectContextProvider.js';
 import { ApiKeys } from './llm/gateway.js';
 import {
   WorkflowConfig,
@@ -16,6 +17,7 @@ import {
   SaveTemplatePayload,
   SerializedExecutionState,
   OutputFormat,
+  ProjectContextOptions,
 } from './types/index.js';
 
 const EXTENSION_ID = 'ai-agent-orchestrator';
@@ -24,19 +26,20 @@ let currentOrchestrator: Orchestrator | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
   const fileContextProvider = new FileContextProvider();
+  const projectContextProvider = new ProjectContextProvider(fileContextProvider);
   const templateManager = new TemplateManager();
 
   // ─── Commands ────────────────────────────────────────────────────────────
 
   context.subscriptions.push(
     vscode.commands.registerCommand('aiAgentOrchestrator.openPanel', () => {
-      openOrFocusPanel(context, fileContextProvider, templateManager);
+      openOrFocusPanel(context, fileContextProvider, projectContextProvider, templateManager);
     })
   );
 
   context.subscriptions.push(
     vscode.commands.registerCommand('aiAgentOrchestrator.createFromTemplate', async () => {
-      openOrFocusPanel(context, fileContextProvider, templateManager);
+      openOrFocusPanel(context, fileContextProvider, projectContextProvider, templateManager);
       // Panel will handle template selection in the UI
       currentPanel?.webview.postMessage({
         type: 'template:open_selector',
@@ -70,6 +73,7 @@ export function deactivate(): void {
 function openOrFocusPanel(
   context: vscode.ExtensionContext,
   fileContextProvider: FileContextProvider,
+  projectContextProvider: ProjectContextProvider,
   templateManager: TemplateManager
 ): void {
   if (currentPanel) {
@@ -111,7 +115,7 @@ function openOrFocusPanel(
   // Handle messages from Webview
   currentPanel.webview.onDidReceiveMessage(
     async (message: WebviewMessage) => {
-      await handleWebviewMessage(message, context, fileContextProvider, templateManager);
+      await handleWebviewMessage(message, context, fileContextProvider, projectContextProvider, templateManager);
     },
     undefined,
     context.subscriptions
@@ -124,24 +128,47 @@ async function handleWebviewMessage(
   message: WebviewMessage,
   context: vscode.ExtensionContext,
   fileContextProvider: FileContextProvider,
+  projectContextProvider: ProjectContextProvider,
   templateManager: TemplateManager
 ): Promise<void> {
   switch (message.type) {
     case 'source:get': {
+      // Legacy: return active file only
       const source = fileContextProvider.getActiveFileSnapshot();
       postMessage({ type: 'source:get', payload: { source } });
       break;
     }
 
+    case 'context:get': {
+      const opts = getContextOptions(context);
+      const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      const ctx = await projectContextProvider.buildProjectContext(workspaceRoot, opts);
+      const summary = projectContextProvider.buildSummary(ctx);
+      postMessage({ type: 'context:get', payload: { summary } });
+      break;
+    }
+
+    case 'context:set_mode': {
+      const payload = message.payload as { mode: 'file' | 'project' };
+      await context.globalState.update('contextMode', payload.mode);
+      // Immediately refresh context
+      const opts = getContextOptions(context);
+      const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      const ctx = await projectContextProvider.buildProjectContext(workspaceRoot, opts);
+      const summary = projectContextProvider.buildSummary(ctx);
+      postMessage({ type: 'context:get', payload: { summary } });
+      break;
+    }
+
     case 'workflow:generate': {
       const payload = message.payload as GenerateWorkflowPayload;
-      await handleGenerateWorkflow(payload, context, fileContextProvider);
+      await handleGenerateWorkflow(payload, context, fileContextProvider, projectContextProvider);
       break;
     }
 
     case 'workflow:execute': {
       const payload = message.payload as ExecuteWorkflowPayload;
-      await handleExecuteWorkflow(payload, context, fileContextProvider);
+      await handleExecuteWorkflow(payload, context, fileContextProvider, projectContextProvider);
       break;
     }
 
@@ -289,10 +316,15 @@ async function handleWebviewMessage(
 async function handleGenerateWorkflow(
   payload: GenerateWorkflowPayload,
   context: vscode.ExtensionContext,
-  fileContextProvider: FileContextProvider
+  fileContextProvider: FileContextProvider,
+  projectContextProvider: ProjectContextProvider
 ): Promise<void> {
   const apiKeys = await getApiKeys(context);
-  const source = fileContextProvider.getActiveFileSnapshot();
+  const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  const opts = getContextOptions(context);
+  const projectCtx = await projectContextProvider.buildProjectContext(workspaceRoot, opts);
+  // For meta-AI generation, always pass the active file as source (the meta prompt is light)
+  const source = projectCtx.activeFile;
 
   postMessage({ type: 'workflow:generate', payload: { status: 'generating' } });
 
@@ -313,10 +345,14 @@ async function handleGenerateWorkflow(
 async function handleExecuteWorkflow(
   payload: ExecuteWorkflowPayload,
   context: vscode.ExtensionContext,
-  fileContextProvider: FileContextProvider
+  fileContextProvider: FileContextProvider,
+  projectContextProvider: ProjectContextProvider
 ): Promise<void> {
   const apiKeys = await getApiKeys(context);
-  const source = fileContextProvider.getActiveFileSnapshot();
+  const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  const opts = getContextOptions(context);
+  const projectCtx = await projectContextProvider.buildProjectContext(workspaceRoot, opts);
+  const source = projectCtx.activeFile;
 
   if (!source) {
     vscode.window.showWarningMessage('AI Agent: Please open a file in the editor before running.');
@@ -384,7 +420,18 @@ async function handleExecuteWorkflow(
   });
 
   postMessage({ type: 'workflow:execute', payload: { status: 'started' } });
-  await currentOrchestrator.execute(payload.config, source);
+  await currentOrchestrator.execute(payload.config, projectCtx);
+}
+
+// ─── Context Options ─────────────────────────────────────────────────────────
+
+function getContextOptions(context: vscode.ExtensionContext): ProjectContextOptions {
+  const vsConfig = vscode.workspace.getConfiguration('aiAgentOrchestrator');
+  const modeFromVsConfig = vsConfig.get<'file' | 'project'>('contextMode', 'project');
+  const modeFromState = context.globalState.get<'file' | 'project'>('contextMode');
+  const mode = modeFromState ?? modeFromVsConfig;
+  const tokenBudget = vsConfig.get<number>('contextTokenBudget', 32000);
+  return { mode, tokenBudget };
 }
 
 // ─── API Key Management ───────────────────────────────────────────────────────

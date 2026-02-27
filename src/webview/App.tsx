@@ -8,8 +8,106 @@ import { BreakpointPanel } from './components/BreakpointPanel.js';
 import { TemplateSaveDialog } from './components/TemplateSaveDialog.js';
 import { TemplateSelector } from './components/TemplateSelector.js';
 import { ToastContainer, ToastItem } from './components/Toast.js';
-import { WorkflowTemplate } from '../types/index.js';
+import { WorkflowTemplate, ProjectContextSummary, SourceInput } from '../types/index.js';
 import { v4 as uuidv4 } from 'uuid';
+
+// ─── ContextIndicator ─────────────────────────────────────────────────────────
+
+interface ContextIndicatorProps {
+  summary: ProjectContextSummary | null;
+  source: SourceInput | null;
+  onToggleMode: () => void;
+  onRefresh: () => void;
+}
+
+function ContextIndicator({ summary, source, onToggleMode, onRefresh }: ContextIndicatorProps) {
+  const { t } = useTranslation();
+  const isProject = summary?.mode === 'project';
+
+  if (!summary && !source) {
+    // No context at all
+    return (
+      <div className="source-indicator source-indicator--empty">
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+          <circle cx="6.5" cy="6.5" r="5.5" stroke="currentColor" strokeWidth="1.3"/>
+          <path d="M6.5 4v3.5M6.5 9v.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+        </svg>
+        {t('app.noSource')}
+      </div>
+    );
+  }
+
+  const activeFilename = summary?.activeFilename ?? source?.filename ?? null;
+  const tokenK = summary ? Math.round(summary.tokenEstimate / 100) / 10 : null;
+
+  return (
+    <div className={`source-indicator source-indicator--context${isProject ? ' source-indicator--project' : ''}`}>
+      {/* Mode toggle button */}
+      <button
+        className="source-indicator__mode-btn"
+        onClick={onToggleMode}
+        title={isProject ? 'Switch to file-only mode' : 'Switch to project mode'}
+        aria-label={isProject ? 'Project mode (click to switch to file mode)' : 'File mode (click to switch to project mode)'}
+      >
+        {isProject ? (
+          // Folder icon for project mode
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+            <path d="M1.5 3h3.5l1 1.5H11.5v6H1.5V3z" stroke="currentColor" strokeWidth="1.2" fill="none"/>
+          </svg>
+        ) : (
+          // File icon for file mode
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+            <path d="M2 2h7l2 2v7H2V2z" stroke="currentColor" strokeWidth="1.3"/>
+            <path d="M5 5.5h3M5 7.5h2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+          </svg>
+        )}
+        <span className="source-indicator__mode-label">{isProject ? 'Project' : 'File'}</span>
+        <span className="source-indicator__chevron">▾</span>
+      </button>
+
+      {/* Active file */}
+      {activeFilename && (
+        <span className="source-indicator__name" title={activeFilename}>{activeFilename}</span>
+      )}
+
+      {/* Project-mode extras */}
+      {isProject && summary && (
+        <>
+          {summary.totalFiles > 0 && (
+            <span className="source-indicator__meta">{summary.totalFiles} files</span>
+          )}
+          {summary.relatedFilePaths.length > 0 && (
+            <span className="source-indicator__meta" title={summary.relatedFilePaths.join('\n')}>
+              +{summary.relatedFilePaths.length} related
+            </span>
+          )}
+          {summary.framework && (
+            <span className="source-indicator__badge">{summary.framework}</span>
+          )}
+          {tokenK !== null && tokenK > 0 && (
+            <span className="source-indicator__meta source-indicator__tokens">~{tokenK}k tok</span>
+          )}
+        </>
+      )}
+
+      {/* File-mode: show language + lines */}
+      {!isProject && source && (
+        <>
+          <span className="source-indicator__meta">{source.language_id}</span>
+          <span className="source-indicator__meta">{source.line_count.toLocaleString()} lines</span>
+        </>
+      )}
+
+      {/* Refresh button */}
+      <button
+        className="source-indicator__refresh"
+        onClick={onRefresh}
+        title="Refresh context"
+        aria-label="Refresh context"
+      >↺</button>
+    </div>
+  );
+}
 
 export function App() {
   const { t } = useTranslation();
@@ -17,6 +115,7 @@ export function App() {
     config,
     executionState,
     source,
+    contextSummary,
     templates,
     dryRunResult,
     isGenerating,
@@ -31,6 +130,8 @@ export function App() {
     loadTemplates,
     setConfig,
     clearDryRun,
+    setContextMode,
+    refreshContext,
     undo,
     redo,
     canUndo,
@@ -268,26 +369,16 @@ export function App() {
         )}
       </div>
 
-      {/* ── Source indicator ────────────────────── */}
-      {source ? (
-        <div className="source-indicator">
-          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
-            <path d="M2 2h7l2 2v7H2V2z" stroke="currentColor" strokeWidth="1.3"/>
-            <path d="M5 5.5h3M5 7.5h2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-          </svg>
-          <span className="source-indicator__name">{source.filename}</span>
-          <span className="source-indicator__meta">{source.language_id}</span>
-          <span className="source-indicator__meta">{source.line_count.toLocaleString()} lines</span>
-        </div>
-      ) : (
-        <div className="source-indicator source-indicator--empty">
-          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
-            <circle cx="6.5" cy="6.5" r="5.5" stroke="currentColor" strokeWidth="1.3"/>
-            <path d="M6.5 4v3.5M6.5 9v.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-          </svg>
-          {t('app.noSource')}
-        </div>
-      )}
+      {/* ── Context indicator ───────────────────── */}
+      <ContextIndicator
+        summary={contextSummary}
+        source={source}
+        onToggleMode={() => {
+          const next = contextSummary?.mode === 'project' ? 'file' : 'project';
+          setContextMode(next);
+        }}
+        onRefresh={refreshContext}
+      />
 
       {/* ── Pipeline ────────────────────────────── */}
       {config && (

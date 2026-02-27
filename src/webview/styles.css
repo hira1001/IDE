@@ -1189,13 +1189,58 @@ body {
 }
 .generating-indicator__text { font-size: 11px; color: var(--aao-blue); }
 
-/* ─── Source Indicator extras ────────────────────────────────────────────────── */
+/* ─── Source / Context Indicator extras ─────────────────────────────────────── */
 .source-indicator__meta {
   font-family: var(--aao-font-mono);
   font-size: 10px;
   color: var(--aao-muted);
   opacity: 0.7;
 }
+
+/* Mode toggle button inside the source indicator */
+.source-indicator__mode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: none;
+  border: none;
+  padding: 0 6px 0 0;
+  cursor: pointer;
+  color: var(--aao-text);
+  font-size: 11px;
+  font-family: var(--aao-font-sans);
+  border-right: 1px solid var(--aao-border);
+  margin-right: 2px;
+  opacity: 0.85;
+}
+.source-indicator__mode-btn:hover { opacity: 1; color: var(--aao-blue); }
+.source-indicator__mode-label { font-weight: 600; }
+.source-indicator__chevron { font-size: 9px; opacity: 0.6; }
+
+/* Refresh button */
+.source-indicator__refresh {
+  margin-left: auto;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--aao-muted);
+  font-size: 13px;
+  padding: 0 2px;
+  line-height: 1;
+}
+.source-indicator__refresh:hover { color: var(--aao-blue); }
+
+/* Token estimate — slightly dimmer */
+.source-indicator__tokens { opacity: 0.55; }
+
+/* Project mode — subtle left accent */
+.source-indicator--project {
+  border-left: 2px solid var(--aao-blue);
+  padding-left: calc(8px - 2px);
+}
+
+/* Context-mode variant (replaces old source-indicator) */
+.source-indicator--context { flex-wrap: nowrap; overflow: hidden; }
 
 /* ─── Empty State ─────────────────────────────────────────────────────────────── */
 .empty-state {

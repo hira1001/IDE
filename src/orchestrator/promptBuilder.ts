@@ -1,4 +1,4 @@
-import { Agent, Task, WorkflowConfig, SourceInput } from '../types/index.js';
+import { Agent, Task, WorkflowConfig, SourceInput, ProjectContext } from '../types/index.js';
 import { StateManager } from './stateManager.js';
 
 /**
@@ -6,6 +6,11 @@ import { StateManager } from './stateManager.js';
  * System instructions live in <system_instructions> tags.
  * User/agent data lives in <user_data> tags.
  * This prevents prompt injection from user-controlled content.
+ *
+ * Special from_agent_id values:
+ *   __source__  → active file only (original behavior)
+ *   __project__ → full project context (tree + active file + related files)
+ *   __tree__    → file tree only (ultra token-efficient)
  */
 export class PromptBuilder {
   constructor(
@@ -49,14 +54,35 @@ ${handoverSection}${loopNote}
 
   buildUserPrompt(task: Task, config: WorkflowConfig): string {
     const sections: string[] = [];
+    const projectCtx = this.stateManager.getProjectContext();
 
     for (const mapping of task.input_mapping) {
       if (mapping.from_agent_id === '__source__') {
+        // Active file only (original behavior)
         const src = this.source ?? this.stateManager.getSource();
         if (src) {
           sections.push(
             `## ${mapping.label}:\nファイル名: ${src.filename} (${src.language_id}, ${src.line_count}行)\n\n${src.content}`
           );
+        }
+      } else if (mapping.from_agent_id === '__project__') {
+        // Full project context: tree + active file + related files
+        const ctx = projectCtx;
+        if (ctx) {
+          sections.push(`## ${mapping.label}:\n${this.buildProjectContextBlock(ctx)}`);
+        } else {
+          // Fallback to active file if project context not available
+          const src = this.stateManager.getSource();
+          if (src) {
+            sections.push(
+              `## ${mapping.label}:\nファイル名: ${src.filename} (${src.language_id}, ${src.line_count}行)\n\n${src.content}`
+            );
+          }
+        }
+      } else if (mapping.from_agent_id === '__tree__') {
+        // File tree only — cheapest context
+        if (projectCtx?.fileTree) {
+          sections.push(`## ${mapping.label}:\n<project_structure>\n${projectCtx.fileTree}\n</project_structure>`);
         }
       } else {
         // Find the output_key for this agent's task
@@ -76,7 +102,7 @@ ${handoverSection}${loopNote}
     // Append relevant handover notes
     const notes: string[] = [];
     for (const mapping of task.input_mapping) {
-      if (mapping.from_agent_id !== '__source__') {
+      if (mapping.from_agent_id !== '__source__' && mapping.from_agent_id !== '__project__' && mapping.from_agent_id !== '__tree__') {
         const note = this.stateManager.getLatestHandoverNoteFor(mapping.from_agent_id);
         if (note) {
           notes.push(`（前担当者からのメモ: ${note.note}）`);
@@ -89,6 +115,34 @@ ${handoverSection}${loopNote}
     return `<user_data>
 ${sections.join('\n\n')}${noteSection}
 </user_data>`;
+  }
+
+  /** Build the <project_context> XML block for __project__ mapping. */
+  private buildProjectContextBlock(ctx: ProjectContext): string {
+    const parts: string[] = ['<project_context>'];
+
+    // File tree
+    if (ctx.fileTree) {
+      parts.push(`<structure>\n${ctx.fileTree}\n</structure>`);
+    }
+
+    // Active file
+    if (ctx.activeFile) {
+      const f = ctx.activeFile;
+      parts.push(`<active_file name="${f.filename}" language="${f.language_id}" lines="${f.line_count}">\n${f.content}\n</active_file>`);
+    }
+
+    // Related files
+    if (ctx.relatedFiles.length > 0) {
+      parts.push('<related_files>');
+      for (const f of ctx.relatedFiles) {
+        parts.push(`<file name="${f.relativePath}" reason="${f.reason}" language="${f.language_id}">\n${f.content}\n</file>`);
+      }
+      parts.push('</related_files>');
+    }
+
+    parts.push('</project_context>');
+    return parts.join('\n');
   }
 
   buildRetryPrompt(previousOutput: string, outputFormat: string): string {

@@ -10,6 +10,7 @@ import {
   ValidationResult,
   SerializedExecutionState,
   SourceInput,
+  ProjectContext,
 } from '../types/index.js';
 
 /**
@@ -19,6 +20,7 @@ import {
 export class StateManager {
   private state: ExecutionState;
   private source: SourceInput | null = null;
+  private projectContext: ProjectContext | null = null;
 
   constructor() {
     this.state = this.createInitialState();
@@ -43,16 +45,27 @@ export class StateManager {
   reset(): void {
     this.state = this.createInitialState();
     this.source = null;
+    this.projectContext = null;
   }
 
-  // ─── Source ────────────────────────────────────────────────────────────────
+  // ─── Source / Project Context ─────────────────────────────────────────────
 
   setSource(source: SourceInput): void {
     this.source = source;
   }
 
   getSource(): SourceInput | null {
-    return this.source;
+    // Prefer active file from project context if available
+    return this.projectContext?.activeFile ?? this.source;
+  }
+
+  setProjectContext(ctx: ProjectContext): void {
+    this.projectContext = ctx;
+    this.source = ctx.activeFile; // backward compat
+  }
+
+  getProjectContext(): ProjectContext | null {
+    return this.projectContext;
   }
 
   // ─── Workflow Status ───────────────────────────────────────────────────────

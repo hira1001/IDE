@@ -62,6 +62,23 @@
           "type": "string",
           "default": "http://localhost:11434",
           "description": "Ollama server endpoint URL for local LLM execution (e.g. http://localhost:11434)"
+        },
+        "aiAgentOrchestrator.contextMode": {
+          "type": "string",
+          "enum": ["file", "project"],
+          "enumDescriptions": [
+            "Active file only — same as the original single-file behavior",
+            "Entire project — file tree + active file + related files (recommended)"
+          ],
+          "default": "project",
+          "description": "Context mode passed to agents. 'project' gives agents full project understanding; 'file' limits to the active editor file."
+        },
+        "aiAgentOrchestrator.contextTokenBudget": {
+          "type": "number",
+          "default": 32000,
+          "minimum": 4000,
+          "maximum": 200000,
+          "description": "Maximum tokens to spend on project context (related files). Increase for larger models; decrease to reduce costs."
         }
       }
     }

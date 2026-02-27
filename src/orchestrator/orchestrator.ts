@@ -4,6 +4,7 @@ import {
   Task,
   Agent,
   SourceInput,
+  ProjectContext,
   SerializedExecutionState,
   HandoverNote,
 } from '../types/index.js';
@@ -50,9 +51,14 @@ export class Orchestrator {
     return this.stateManager;
   }
 
-  async execute(config: WorkflowConfig, source: SourceInput): Promise<void> {
+  async execute(config: WorkflowConfig, source: SourceInput | ProjectContext): Promise<void> {
     this.stateManager.reset();
-    this.stateManager.setSource(source);
+    if ('mode' in source) {
+      // ProjectContext
+      this.stateManager.setProjectContext(source);
+    } else {
+      this.stateManager.setSource(source);
+    }
     this.stateManager.setStatus('running');
 
     // Initialize task states
@@ -99,7 +105,7 @@ export class Orchestrator {
     this.emit();
 
     const source = this.stateManager.getSource();
-    const promptBuilder = new PromptBuilder(this.stateManager, source);
+    const promptBuilder = new PromptBuilder(this.stateManager, source ?? null);
     await this.runTask(task, agent, step.step, config, promptBuilder);
     this.emit();
   }
@@ -165,7 +171,7 @@ export class Orchestrator {
       this.emit();
 
       const source = this.stateManager.getSource();
-      const promptBuilder = new PromptBuilder(this.stateManager, source);
+      const promptBuilder = new PromptBuilder(this.stateManager, source ?? null);
 
       if (this.stateManager.getStatus() === 'aborted') break;
 
