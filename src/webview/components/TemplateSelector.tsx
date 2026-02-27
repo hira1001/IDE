@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { WorkflowTemplate } from '../../types/index.js';
+import { useVSCode } from '../hooks/useVSCode.js';
 
 interface TemplateSelectorProps {
   templates: WorkflowTemplate[];
@@ -9,6 +10,7 @@ interface TemplateSelectorProps {
 }
 
 export function TemplateSelector({ templates, onSelect, onClose }: TemplateSelectorProps) {
+  const { postMessage } = useVSCode();
   const { t } = useTranslation();
   const [filter, setFilter] = useState('');
   const [hoveredId, setHoveredId] = useState<string | null>(null);
@@ -122,6 +124,14 @@ export function TemplateSelector({ templates, onSelect, onClose }: TemplateSelec
                     )}
                   </div>
                 </div>
+                <button
+                  className="btn btn--ghost btn--sm"
+                  onClick={() => postMessage({ type: 'template:export', payload: { template_id: tpl.template_id } })}
+                  title="Export template as JSON"
+                  aria-label="Export template"
+                >
+                  ↓
+                </button>
                 <button className="btn btn--primary btn--sm template-item__load" onClick={() => onSelect(tpl)}>
                   {t('template.load')}
                 </button>
@@ -131,7 +141,14 @@ export function TemplateSelector({ templates, onSelect, onClose }: TemplateSelec
         </div>
 
         {/* Footer */}
-        <div className="panel-card__footer panel-card__footer--right">
+        <div className="panel-card__footer" style={{ justifyContent: 'space-between' }}>
+          <button
+            className="btn btn--secondary btn--sm"
+            onClick={() => postMessage({ type: 'template:import' })}
+            title="Import template from JSON file"
+          >
+            ↑ Import
+          </button>
           <button className="btn btn--ghost" onClick={onClose}>{t('template.cancel')}</button>
         </div>
       </div>

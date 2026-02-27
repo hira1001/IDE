@@ -1,4 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+
+const MAX_HISTORY = 20;
 import {
   WorkflowConfig,
   SerializedExecutionState,
@@ -31,6 +33,10 @@ const INITIAL_STATE: WorkflowState = {
 export function useWorkflowState() {
   const { postMessage } = useVSCode();
   const [state, setState] = useState<WorkflowState>(INITIAL_STATE);
+  // Undo/redo history — stored in a ref to avoid triggering re-renders on history changes
+  const historyRef = useRef<WorkflowConfig[]>([]);
+  const historyIndexRef = useRef<number>(-1);
+  const [historySize, setHistorySize] = useState({ canUndo: false, canRedo: false });
 
   // Listen for messages from Extension Host
   useEffect(() => {
@@ -139,7 +145,53 @@ export function useWorkflowState() {
   }, [postMessage]);
 
   const setConfig = useCallback((config: WorkflowConfig) => {
-    setState((s) => ({ ...s, config }));
+    setState((s) => {
+      // Push current config to undo history before applying new one
+      if (s.config) {
+        const hist = historyRef.current;
+        const idx = historyIndexRef.current;
+        // Discard any redo entries past current index
+        const newHist = hist.slice(0, idx + 1);
+        newHist.push(s.config);
+        if (newHist.length > MAX_HISTORY) newHist.shift();
+        historyRef.current = newHist;
+        historyIndexRef.current = newHist.length - 1;
+        setHistorySize({ canUndo: newHist.length > 0, canRedo: false });
+      }
+      return { ...s, config };
+    });
+  }, []);
+
+  const undo = useCallback(() => {
+    const hist = historyRef.current;
+    const idx = historyIndexRef.current;
+    if (idx < 0 || hist.length === 0) return;
+    setState((s) => {
+      // Push current config to a "redo stack" by moving index back
+      const prevConfig = hist[idx];
+      // Move redo future: keep current config as a "redo" entry
+      if (s.config && idx === hist.length - 1) {
+        hist.push(s.config);
+      }
+      historyIndexRef.current = idx - 1;
+      const canUndo = idx - 1 >= 0;
+      const canRedo = true;
+      setHistorySize({ canUndo, canRedo });
+      return { ...s, config: prevConfig };
+    });
+  }, []);
+
+  const redo = useCallback(() => {
+    const hist = historyRef.current;
+    const idx = historyIndexRef.current;
+    if (idx >= hist.length - 1) return;
+    const nextIdx = idx + 1;
+    const nextConfig = hist[nextIdx];
+    historyIndexRef.current = nextIdx;
+    const canUndo = true;
+    const canRedo = nextIdx < hist.length - 1;
+    setHistorySize({ canUndo, canRedo });
+    setState((s) => ({ ...s, config: nextConfig }));
   }, []);
 
   const clearDryRun = useCallback(() => {
@@ -159,5 +211,9 @@ export function useWorkflowState() {
     setConfig,
     clearDryRun,
     postMessage,
+    undo,
+    redo,
+    canUndo: historySize.canUndo,
+    canRedo: historySize.canRedo,
   };
 }

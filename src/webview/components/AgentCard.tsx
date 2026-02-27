@@ -1,11 +1,25 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Agent, Task, TaskState, OutputFormat, LLMModel, WorkflowConfig, InputSource } from '../../types/index.js';
+import { useVSCode } from '../hooks/useVSCode.js';
 
-const LLM_MODELS: LLMModel[] = [
-  'gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo',
-  'claude-sonnet-4-5', 'claude-haiku-4-5', 'claude-opus-4-5',
-  'gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-2.0-flash',
+const LLM_MODEL_GROUPS: { label: string; models: LLMModel[] }[] = [
+  {
+    label: 'OpenAI',
+    models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo'],
+  },
+  {
+    label: 'Anthropic',
+    models: ['claude-sonnet-4-5', 'claude-haiku-4-5', 'claude-opus-4-5'],
+  },
+  {
+    label: 'Google',
+    models: ['gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-2.0-flash'],
+  },
+  {
+    label: 'Local (Ollama)',
+    models: ['ollama:llama3.2', 'ollama:llama3.1', 'ollama:mistral', 'ollama:deepseek-coder', 'ollama:qwen2.5', 'ollama:gemma2'],
+  },
 ];
 const OUTPUT_FORMATS: OutputFormat[] = ['Markdown', 'Mermaid', 'JSON', 'PlainText', 'Code'];
 
@@ -29,13 +43,25 @@ interface AgentCardProps {
   onUpdateTask: (task: Task) => void;
   onRetry: () => void;
   onDelete: () => void;
+  // Drag & drop
+  taskIndex?: number;
+  isDragOver?: boolean;
+  onDragStart?: (index: number) => void;
+  onDragOver?: (e: React.DragEvent, index: number) => void;
+  onDrop?: (e: React.DragEvent, index: number) => void;
+  onDragEnd?: () => void;
+  // Toast callback for clipboard feedback
+  onToast?: (message: string, type: 'success' | 'error' | 'info') => void;
 }
 
 export function AgentCard({
   agent, task, taskState, output, config,
   onUpdateAgent, onUpdateTask, onRetry, onDelete,
+  taskIndex, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd,
+  onToast,
 }: AgentCardProps) {
   const { t } = useTranslation();
+  const { postMessage } = useVSCode();
   const [expanded, setExpanded] = useState(false);
   const [editingOutput, setEditingOutput] = useState(false);
   const [editedOutput, setEditedOutput] = useState(output ?? '');
@@ -57,6 +83,11 @@ export function AgentCard({
   }, [isActive]);
 
   useEffect(() => { setEditedOutput(output ?? ''); }, [output]);
+
+  // Auto-expand when task enters error state
+  useEffect(() => {
+    if (status === 'error') setExpanded(true);
+  }, [status]);
 
   const updateInstruction = (idx: number, val: string) => {
     const instructions = [...task.instructions]; instructions[idx] = val;
@@ -105,11 +136,38 @@ export function AgentCard({
 
   const initial = agent.name ? agent.name[0].toUpperCase() : '?';
 
+  const handleCopyOutput = () => {
+    if (!output) return;
+    navigator.clipboard.writeText(output).then(() => {
+      onToast?.('Output copied to clipboard', 'success');
+    }).catch(() => {
+      onToast?.('Copy failed', 'error');
+    });
+  };
+
+  const handleSaveOutput = () => {
+    if (!output) return;
+    postMessage({ type: 'output:save', payload: { output_key: task.output_key, content: output, filename: `${agent.name}_${task.output_key}` } });
+  };
+
   return (
-    <div className={`agent-card card--${status}`} draggable>
+    <div
+      className={`agent-card card--${status}${isDragOver ? ' agent-card--drag-over' : ''}`}
+      draggable
+      onDragStart={() => onDragStart?.(taskIndex ?? 0)}
+      onDragOver={(e) => onDragOver?.(e, taskIndex ?? 0)}
+      onDrop={(e) => onDrop?.(e, taskIndex ?? 0)}
+      onDragEnd={onDragEnd}
+    >
 
       {/* ── Header ── */}
-      <div className="agent-card__header" onClick={() => setExpanded((e) => !e)}>
+      <button
+        type="button"
+        className="agent-card__header"
+        onClick={() => setExpanded((e) => !e)}
+        aria-expanded={expanded}
+        aria-label={`${agent.name}: ${task.task_name}`}
+      >
         <span className="agent-card__drag" title="Drag to reorder">⠿</span>
         <div className="agent-card__avatar">{initial}</div>
 
@@ -129,13 +187,13 @@ export function AgentCard({
         <span className={`agent-card__chevron ${expanded ? 'agent-card__chevron--open' : ''}`}>▼</span>
 
         {/* Mini action buttons — stop propagation so they don't toggle expand */}
-        <div className="agent-card__mini-actions" onClick={(e) => e.stopPropagation()}>
+        <div className="agent-card__mini-actions" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
           {(status === 'completed' || status === 'error') && (
-            <button className="card-mini-btn" onClick={onRetry} title={t('card.retry')}>🔄</button>
+            <button className="card-mini-btn" onClick={onRetry} title={t('card.retry')} aria-label={t('card.retry')}>🔄</button>
           )}
-          <button className="card-mini-btn card-mini-btn--danger" onClick={onDelete} title="Delete">✕</button>
+          <button className="card-mini-btn card-mini-btn--danger" onClick={onDelete} title="Delete" aria-label="Delete agent">✕</button>
         </div>
-      </div>
+      </button>
 
       {/* ── Status Strip ── */}
       {status !== 'idle' && (
@@ -269,7 +327,11 @@ export function AgentCard({
               <label className="field-label">{t('card.model')}</label>
               <select className="field-select" value={agent.model}
                 onChange={(e) => onUpdateAgent({ ...agent, model: e.target.value as LLMModel })}>
-                {LLM_MODELS.map((m) => <option key={m} value={m}>{m}</option>)}
+                {LLM_MODEL_GROUPS.map((group) => (
+                  <optgroup key={group.label} label={group.label}>
+                    {group.models.map((m) => <option key={m} value={m}>{m}</option>)}
+                  </optgroup>
+                ))}
               </select>
             </div>
 
@@ -286,6 +348,18 @@ export function AgentCard({
             <div className="agent-card__output-section">
               <div className="agent-card__output-header">
                 <span className="agent-card__output-title">Output</span>
+                <button className="btn btn--ghost btn--xs"
+                  onClick={handleCopyOutput}
+                  title="Copy output to clipboard"
+                  aria-label="Copy output to clipboard">
+                  📋
+                </button>
+                <button className="btn btn--ghost btn--xs"
+                  onClick={handleSaveOutput}
+                  title="Save output to file"
+                  aria-label="Save output to file">
+                  💾
+                </button>
                 <button className="btn btn--ghost btn--xs"
                   onClick={() => setEditingOutput((v) => !v)}>
                   {editingOutput ? '✓ Done' : '✏️ Edit'}

@@ -99,6 +99,15 @@ function openOrFocusPanel(
     currentOrchestrator = undefined;
   });
 
+  // Restore last execution state if available
+  const savedState = context.globalState.get<SerializedExecutionState>('lastExecutionState');
+  if (savedState && (savedState.status === 'completed' || savedState.status === 'error')) {
+    // Delay slightly to ensure webview is ready
+    setTimeout(() => {
+      postMessage({ type: 'status:update', payload: { execution_state: savedState } });
+    }, 500);
+  }
+
   // Handle messages from Webview
   currentPanel.webview.onDidReceiveMessage(
     async (message: WebviewMessage) => {
@@ -205,6 +214,71 @@ async function handleWebviewMessage(
       break;
     }
 
+    case 'output:save': {
+      const payload = message.payload as { output_key: string; content: string; filename: string };
+      const uri = await vscode.window.showSaveDialog({
+        defaultUri: vscode.Uri.file(payload.filename),
+        filters: { 'Text files': ['md', 'txt', 'json'], 'All files': ['*'] },
+      });
+      if (uri) {
+        await vscode.workspace.fs.writeFile(uri, Buffer.from(payload.content, 'utf-8'));
+        vscode.window.showInformationMessage(`Output saved to ${uri.fsPath}`);
+      }
+      break;
+    }
+
+    case 'clipboard:write': {
+      const payload = message.payload as { text: string };
+      await vscode.env.clipboard.writeText(payload.text);
+      break;
+    }
+
+    case 'workflow:execute_from': {
+      const payload = message.payload as { config: WorkflowConfig; fromStep: number };
+      if (currentOrchestrator) {
+        await currentOrchestrator.executeFrom(payload.config, payload.fromStep);
+      }
+      break;
+    }
+
+    case 'template:export': {
+      const payload = message.payload as { template_id: string };
+      const workspaceDir = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      const homeDir = process.env.HOME ?? process.env.USERPROFILE ?? '';
+      const templates = await templateManager.list({ workspace: workspaceDir, global: homeDir });
+      const template = templates.find((t) => t.template_id === payload.template_id);
+      if (template) {
+        const uri = await vscode.window.showSaveDialog({
+          defaultUri: vscode.Uri.file(`${template.name.replace(/[^a-z0-9]/gi, '_')}.aao-template.json`),
+          filters: { 'AAO Template': ['json'] },
+        });
+        if (uri) {
+          await vscode.workspace.fs.writeFile(uri, Buffer.from(JSON.stringify(template, null, 2), 'utf-8'));
+          vscode.window.showInformationMessage(`Template exported to ${uri.fsPath}`);
+        }
+      }
+      break;
+    }
+
+    case 'template:import': {
+      const uris = await vscode.window.showOpenDialog({
+        canSelectFiles: true,
+        canSelectMany: false,
+        filters: { 'AAO Template': ['json'] },
+      });
+      if (uris && uris[0]) {
+        const raw = await vscode.workspace.fs.readFile(uris[0]);
+        const workspaceDir = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        const homeDir = process.env.HOME ?? process.env.USERPROFILE ?? '';
+        const baseDir = workspaceDir ?? homeDir;
+        await templateManager.importFromJson(Buffer.from(raw).toString('utf-8'), baseDir);
+        const templates = await templateManager.list({ workspace: workspaceDir, global: homeDir });
+        postMessage({ type: 'template:list', payload: { templates } });
+        vscode.window.showInformationMessage('Template imported successfully.');
+      }
+      break;
+    }
+
     default:
       console.warn('[Extension] Unknown message type:', message.type);
   }
@@ -277,6 +351,11 @@ async function handleExecuteWorkflow(
     onStatusUpdate: (state: SerializedExecutionState) => {
       postMessage({ type: 'status:update', payload: { execution_state: state } });
 
+      // Persist state to globalState for restoration after VS Code reload
+      if (state.status === 'completed' || state.status === 'error') {
+        context.globalState.update('lastExecutionState', state);
+      }
+
       // Show VS Code notification on error (dual notification per design)
       if (state.status === 'error') {
         vscode.window.showErrorMessage('AI Agent: An error occurred during workflow execution.', 'Show Panel')
@@ -314,10 +393,14 @@ async function getApiKeys(context: vscode.ExtensionContext): Promise<ApiKeys> {
   const openai = await context.secrets.get('aiAgentOrchestrator.openaiKey');
   const anthropic = await context.secrets.get('aiAgentOrchestrator.anthropicKey');
   const google = await context.secrets.get('aiAgentOrchestrator.googleKey');
+  const ollamaEndpoint = vscode.workspace
+    .getConfiguration('aiAgentOrchestrator')
+    .get<string>('ollamaEndpoint', 'http://localhost:11434');
   return {
     openai: openai ?? undefined,
     anthropic: anthropic ?? undefined,
     google: google ?? undefined,
+    ollama: ollamaEndpoint,
   };
 }
 

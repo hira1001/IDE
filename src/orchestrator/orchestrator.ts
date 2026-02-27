@@ -104,6 +104,36 @@ export class Orchestrator {
     this.emit();
   }
 
+  /**
+   * Re-execute workflow from a specific step index, preserving outputs from prior steps.
+   * Does NOT reset stateManager — reuses existing output_store.
+   */
+  async executeFrom(config: WorkflowConfig, fromStepIndex: number): Promise<void> {
+    // Reinitialize only the tasks from fromStepIndex onwards
+    for (let i = fromStepIndex; i < config.workflow.length; i++) {
+      for (const task of config.workflow[i].tasks) {
+        this.stateManager.initTaskState(task.task_id);
+      }
+    }
+    this.stateManager.setStatus('running');
+    this.emit();
+
+    try {
+      await this.runWorkflowFrom(config, fromStepIndex);
+      this.stateManager.setStatus('completed');
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') {
+        this.stateManager.setStatus('aborted');
+      } else {
+        this.stateManager.setStatus('error');
+        console.error('[Orchestrator] Fatal error in executeFrom:', err);
+      }
+    } finally {
+      this.abortManager.clear();
+      this.emit();
+    }
+  }
+
   manualEditOutput(outputKey: string, content: string, step: number): void {
     this.stateManager.setOutput(outputKey, content);
     this.stateManager.log(step, '__manual__', 'manual_edit', `output_key: ${outputKey}`);
@@ -117,9 +147,17 @@ export class Orchestrator {
 
   // ─── Internal Execution ───────────────────────────────────────────────────
 
+  private async runWorkflowFrom(config: WorkflowConfig, fromStepIndex: number): Promise<void> {
+    return this.runWorkflowInternal(config, fromStepIndex);
+  }
+
   private async runWorkflow(config: WorkflowConfig): Promise<void> {
+    return this.runWorkflowInternal(config, 0);
+  }
+
+  private async runWorkflowInternal(config: WorkflowConfig, startStepIndex: number): Promise<void> {
     const { workflow } = config;
-    let stepIndex = 0;
+    let stepIndex = startStepIndex;
 
     while (stepIndex < workflow.length) {
       const step = workflow[stepIndex];

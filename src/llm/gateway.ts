@@ -2,14 +2,20 @@ import { LLMGateway, LLMModel } from '../types/index.js';
 import { OpenAIAdapter } from './openaiAdapter.js';
 import { AnthropicAdapter } from './anthropicAdapter.js';
 import { GoogleAIAdapter } from './googleAdapter.js';
+import { OllamaAdapter } from './ollamaAdapter.js';
 
 export type ApiKeys = {
   openai?: string;
   anthropic?: string;
   google?: string;
+  /** Ollama server endpoint URL (e.g. "http://localhost:11434"). No API key needed. */
+  ollama?: string;
 };
 
 export function getGateway(model: LLMModel, apiKeys: ApiKeys): LLMGateway {
+  if (model.startsWith('ollama:')) {
+    return new OllamaAdapter(apiKeys.ollama ?? 'http://localhost:11434');
+  }
   if (model.startsWith('gpt-')) {
     if (!apiKeys.openai) throw new Error('OpenAI API key is not configured.');
     return new OpenAIAdapter(apiKeys.openai);
@@ -25,15 +31,16 @@ export function getGateway(model: LLMModel, apiKeys: ApiKeys): LLMGateway {
   throw new Error(`Unknown model: ${model}`);
 }
 
-export function getProviderFromModel(model: LLMModel): 'openai' | 'anthropic' | 'google' {
+export function getProviderFromModel(model: LLMModel): 'openai' | 'anthropic' | 'google' | 'ollama' {
+  if (model.startsWith('ollama:')) return 'ollama';
   if (model.startsWith('gpt-')) return 'openai';
   if (model.startsWith('claude-')) return 'anthropic';
   if (model.startsWith('gemini-')) return 'google';
   throw new Error(`Unknown model provider for: ${model}`);
 }
 
-export function getRequiredProviders(models: LLMModel[]): Set<'openai' | 'anthropic' | 'google'> {
-  const providers = new Set<'openai' | 'anthropic' | 'google'>();
+export function getRequiredProviders(models: LLMModel[]): Set<'openai' | 'anthropic' | 'google' | 'ollama'> {
+  const providers = new Set<'openai' | 'anthropic' | 'google' | 'ollama'>();
   for (const model of models) {
     providers.add(getProviderFromModel(model));
   }

@@ -229,4 +229,36 @@ export class StateManager {
       total_cost_usd: this.state.total_cost_usd,
     };
   }
+
+  /**
+   * Restore execution state from a previously serialized snapshot.
+   * Used for state persistence across VS Code reloads.
+   */
+  deserialize(data: SerializedExecutionState): void {
+    const loopCounts = new Map<number, number>();
+    for (const [k, v] of Object.entries(data.loop_counts)) {
+      loopCounts.set(Number(k), v);
+    }
+    const taskStates = new Map<string, TaskState>();
+    for (const [k, v] of Object.entries(data.task_states)) {
+      taskStates.set(k, v);
+    }
+    const outputStore = new Map<string, string>();
+    for (const [k, v] of Object.entries(data.output_store)) {
+      outputStore.set(k, v);
+    }
+    this.state = {
+      workflow_id: data.workflow_id,
+      status: data.status,
+      current_step: data.current_step,
+      loop_counts: loopCounts,
+      task_states: taskStates,
+      output_store: outputStore,
+      handover_notes: data.handover_notes,
+      execution_log: data.execution_log,
+      total_input_tokens: data.total_input_tokens,
+      total_output_tokens: data.total_output_tokens,
+      total_cost_usd: data.total_cost_usd,
+    };
+  }
 }

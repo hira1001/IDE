@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useWorkflowState } from './hooks/useWorkflowState.js';
 import { PipelineView } from './components/PipelineView.js';
@@ -7,7 +7,9 @@ import { DryRunPanel } from './components/DryRunPanel.js';
 import { BreakpointPanel } from './components/BreakpointPanel.js';
 import { TemplateSaveDialog } from './components/TemplateSaveDialog.js';
 import { TemplateSelector } from './components/TemplateSelector.js';
+import { ToastContainer, ToastItem } from './components/Toast.js';
 import { WorkflowTemplate } from '../types/index.js';
+import { v4 as uuidv4 } from 'uuid';
 
 export function App() {
   const { t } = useTranslation();
@@ -29,17 +31,31 @@ export function App() {
     loadTemplates,
     setConfig,
     clearDryRun,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
   } = useWorkflowState();
 
   const [instruction, setInstruction] = useState('');
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [showTemplateSelector, setShowTemplateSelector] = useState(false);
   const [pausedOutputs, setPausedOutputs] = useState<Record<string, string> | null>(null);
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   const status = executionState?.status ?? 'idle';
   const taskStates = executionState?.task_states ?? {};
   const outputStore = executionState?.output_store ?? {};
   const totalCost = executionState?.total_cost_usd ?? 0;
+
+  const addToast = useCallback((message: string, type: ToastItem['type']) => {
+    const id = uuidv4();
+    setToasts((prev) => [...prev, { id, message, type }]);
+  }, []);
+
+  const removeToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
 
   // Detect pause state
   React.useEffect(() => {
@@ -50,14 +66,46 @@ export function App() {
     }
   }, [status, executionState]);
 
+  // Show toast on abort
+  React.useEffect(() => {
+    if (status === 'aborted') addToast('Workflow aborted', 'info');
+  }, [status]); // addToast is stable (useCallback with no deps)
+
+  // Pending auto-run after Generate & Run
+  const pendingAutoRunRef = React.useRef(false);
+  React.useEffect(() => {
+    if (pendingAutoRunRef.current && config && !isGenerating) {
+      pendingAutoRunRef.current = false;
+      executeWorkflow(config);
+    }
+  }, [config, isGenerating]); // executeWorkflow is stable (useCallback)
+
   const handleGenerate = () => {
     if (!instruction.trim()) return;
     generateWorkflow(instruction);
   };
 
+  const handleGenerateAndRun = () => {
+    if (!instruction.trim()) return;
+    pendingAutoRunRef.current = true;
+    generateWorkflow(instruction);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-      handleGenerate();
+      if (e.shiftKey) {
+        handleGenerateAndRun();
+      } else {
+        handleGenerate();
+      }
+    }
+    if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey && canUndo) {
+      e.preventDefault();
+      undo();
+    }
+    if ((e.metaKey || e.ctrlKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey)) && canRedo) {
+      e.preventDefault();
+      redo();
     }
   };
 
@@ -96,7 +144,7 @@ export function App() {
   };
 
   return (
-    <div className="app">
+    <div className="app" onKeyDown={handleKeyDown}>
       {/* ── Header ─────────────────────────────── */}
       <header className="app__header">
         <div className="app__header-brand">
@@ -117,6 +165,22 @@ export function App() {
         </div>
 
         <div className="app__header-actions">
+          {canUndo && (
+            <button
+              className="btn btn--icon-only"
+              onClick={undo}
+              title="Undo (Ctrl+Z)"
+              aria-label="Undo last change"
+            >↩</button>
+          )}
+          {canRedo && (
+            <button
+              className="btn btn--icon-only"
+              onClick={redo}
+              title="Redo (Ctrl+Y)"
+              aria-label="Redo change"
+            >↪</button>
+          )}
           <button
             className="btn btn--icon-only"
             onClick={handleOpenTemplates}
@@ -172,7 +236,9 @@ export function App() {
           </button>
         </div>
         <div className="chat-input-hint">
-          <kbd>Ctrl</kbd>+<kbd>Enter</kbd> to generate
+          <kbd>Ctrl</kbd>+<kbd>Enter</kbd> {t('app.generate') || 'Generate'}
+          {' · '}
+          <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Enter</kbd> {t('app.generateAndRun') || 'Generate & Run'}
         </div>
 
         {isGenerating && (
@@ -191,6 +257,13 @@ export function App() {
               <path d="M7 4.5v3M7 9.5v.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
             </svg>
             {generationError}
+            <button
+              className="btn btn--ghost btn--xs"
+              onClick={handleGenerate}
+              style={{ marginLeft: 8 }}
+            >
+              Retry
+            </button>
           </div>
         )}
       </div>
@@ -224,6 +297,7 @@ export function App() {
           outputStore={outputStore}
           onChange={setConfig}
           onRetryTask={(taskId) => retryTask(taskId, config)}
+          onToast={addToast}
         />
       )}
 
@@ -251,6 +325,8 @@ export function App() {
           status={status}
           dryRunResult={dryRunResult}
           totalCost={totalCost}
+          currentStep={executionState?.current_step}
+          totalSteps={config.workflow.length}
           onPreview={handlePreview}
           onRun={handleRun}
           onStop={abortWorkflow}
@@ -281,6 +357,7 @@ export function App() {
         <TemplateSaveDialog
           config={config}
           onClose={() => setShowSaveDialog(false)}
+          onSaved={() => { setShowSaveDialog(false); addToast('Template saved', 'success'); }}
         />
       )}
 
@@ -291,6 +368,9 @@ export function App() {
           onClose={() => setShowTemplateSelector(false)}
         />
       )}
+
+      {/* ── Toast notifications ─────────────── */}
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>
   );
 }

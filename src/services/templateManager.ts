@@ -94,4 +94,34 @@ export class TemplateManager {
   async delete(filePath: string): Promise<void> {
     await fs.unlink(filePath);
   }
+
+  /**
+   * Import a template from a JSON string and save it to the workspace template directory.
+   */
+  async importFromJson(json: string, baseDir: string): Promise<WorkflowTemplate> {
+    const raw = JSON.parse(json) as Partial<WorkflowTemplate>;
+    if (!raw.config || !raw.schema_version) {
+      throw new Error('Invalid template JSON: missing schema_version or config.');
+    }
+    // Assign a new template_id and timestamps on import to avoid conflicts
+    const now = new Date().toISOString();
+    const template: WorkflowTemplate = {
+      schema_version: SCHEMA_VERSION,
+      template_id: uuidv4(),
+      name: raw.name ?? 'Imported Template',
+      description: raw.description ?? '',
+      tags: raw.tags ?? [],
+      created_at: now,
+      updated_at: now,
+      config: raw.config,
+    };
+
+    const templateDir = this.getTemplateDir(baseDir, 'workspace');
+    await fs.mkdir(templateDir, { recursive: true });
+
+    const sanitizedName = template.name.replace(/[^a-zA-Z0-9_\-\u3040-\u30ff\u4e00-\u9fff]/g, '_');
+    const filename = `${sanitizedName}_${template.template_id.slice(0, 8)}${TEMPLATE_EXT}`;
+    await fs.writeFile(path.join(templateDir, filename), JSON.stringify(template, null, 2), 'utf-8');
+    return template;
+  }
 }

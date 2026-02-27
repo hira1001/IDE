@@ -9,6 +9,7 @@ interface PipelineViewProps {
   outputStore: Record<string, string>;
   onChange: (config: WorkflowConfig) => void;
   onRetryTask: (taskId: string) => void;
+  onToast?: (message: string, type: 'success' | 'error' | 'info') => void;
 }
 
 export function PipelineView({
@@ -17,6 +18,7 @@ export function PipelineView({
   outputStore,
   onChange,
   onRetryTask,
+  onToast,
 }: PipelineViewProps) {
   const { t } = useTranslation();
 
@@ -74,6 +76,7 @@ export function PipelineView({
             onUpdateStep={(updatedStep) => updateStep(idx, updatedStep)}
             onDeleteStep={() => deleteStep(idx)}
             onRetryTask={onRetryTask}
+            onToast={onToast}
           />
 
           {/* Connector arrow */}

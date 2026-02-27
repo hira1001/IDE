@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { v4 as uuidv4 } from 'uuid';
 import { WorkflowStep, WorkflowConfig, TaskState, Agent, Task } from '../../types/index.js';
@@ -13,6 +13,7 @@ interface StepBlockProps {
   onUpdateStep: (step: WorkflowStep) => void;
   onDeleteStep: () => void;
   onRetryTask: (taskId: string) => void;
+  onToast?: (message: string, type: 'success' | 'error' | 'info') => void;
 }
 
 const STEP_TYPE_LABELS: Record<WorkflowStep['type'], string> = {
@@ -21,9 +22,32 @@ const STEP_TYPE_LABELS: Record<WorkflowStep['type'], string> = {
 
 export function StepBlock({
   step, stepIndex, config, taskStates, outputStore,
-  onUpdateStep, onDeleteStep, onRetryTask,
+  onUpdateStep, onDeleteStep, onRetryTask, onToast,
 }: StepBlockProps) {
   const { t } = useTranslation();
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  const handleDragStart = (index: number) => setDragIndex(index);
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    setDragOverIndex(index);
+  };
+  const handleDrop = (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+    if (dragIndex !== null && dragIndex !== dropIndex) {
+      const newTasks = [...step.tasks];
+      const [removed] = newTasks.splice(dragIndex, 1);
+      newTasks.splice(dropIndex, 0, removed);
+      onUpdateStep({ ...step, tasks: newTasks });
+    }
+    setDragIndex(null);
+    setDragOverIndex(null);
+  };
+  const handleDragEnd = () => {
+    setDragIndex(null);
+    setDragOverIndex(null);
+  };
 
   // Compute aggregate step status for styling
   const tasks = step.tasks;
@@ -226,7 +250,7 @@ export function StepBlock({
 
       {/* Cards */}
       <div className={`step-block__cards ${isParallel ? 'step-block__cards--parallel' : ''}`}>
-        {step.tasks.map((task) => {
+        {step.tasks.map((task, taskIndex) => {
           const agent = config.agents.find((a) => a.id === task.agent_id);
           if (!agent) return null;
           return (
@@ -241,6 +265,13 @@ export function StepBlock({
               onUpdateTask={(t) => updateTask(task.task_id, t)}
               onRetry={() => onRetryTask(task.task_id)}
               onDelete={() => deleteTask(task.task_id)}
+              onToast={onToast}
+              taskIndex={taskIndex}
+              isDragOver={dragOverIndex === taskIndex}
+              onDragStart={handleDragStart}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+              onDragEnd={handleDragEnd}
             />
           );
         })}

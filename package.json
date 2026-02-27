@@ -57,6 +57,11 @@
           "enum": ["en", "ja"],
           "default": "en",
           "description": "%config.language%"
+        },
+        "aiAgentOrchestrator.ollamaEndpoint": {
+          "type": "string",
+          "default": "http://localhost:11434",
+          "description": "Ollama server endpoint URL for local LLM execution (e.g. http://localhost:11434)"
         }
       }
     }

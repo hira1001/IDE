@@ -121,12 +121,13 @@ export function validateWorkflow(
     }
   }
 
-  // Check API keys for required providers
+  // Check API keys for required providers (Ollama is local — no key needed)
   const models = config.agents.map((a) => a.model);
   try {
     const requiredProviders = getRequiredProviders(models);
     for (const provider of requiredProviders) {
-      if (!apiKeys[provider]) {
+      if (provider === 'ollama') continue; // local — no API key required
+      if (!apiKeys[provider as 'openai' | 'anthropic' | 'google']) {
         errors.push({
           type: 'error',
           message: `API key for "${provider}" is not configured. Please set it in extension settings.`,

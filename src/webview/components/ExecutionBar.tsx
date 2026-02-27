@@ -6,6 +6,8 @@ interface ExecutionBarProps {
   status: WorkflowStatus;
   dryRunResult: DryRunResult | null;
   totalCost: number;
+  currentStep?: number;
+  totalSteps?: number;
   onPreview: () => void;
   onRun: () => void;
   onStop: () => void;
@@ -26,6 +28,8 @@ export function ExecutionBar({
   status,
   dryRunResult,
   totalCost,
+  currentStep,
+  totalSteps,
   onPreview,
   onRun,
   onStop,
@@ -48,6 +52,13 @@ export function ExecutionBar({
           )}
           {STATUS_LABELS[status]}
         </span>
+
+        {/* Step progress during run */}
+        {(isRunning || isPaused) && totalSteps !== undefined && totalSteps > 0 && (
+          <span className="execution-bar__step-progress" aria-label={`Step ${(currentStep ?? 0) + 1} of ${totalSteps}`}>
+            Step {(currentStep ?? 0) + 1} / {totalSteps}
+          </span>
+        )}
 
         {/* Cost section */}
         <div className="execution-bar__costs">

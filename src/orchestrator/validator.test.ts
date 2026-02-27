@@ -117,4 +117,35 @@ describe('validateWorkflow', () => {
     const errors = validateWorkflow(validConfig, bigSource, { openai: 'sk-test' });
     expect(errors.some((e) => e.type === 'warning' && e.message.includes('KB'))).toBe(true);
   });
+
+  it('does not require API key for ollama: models', () => {
+    const ollamaConfig: WorkflowConfig = {
+      agents: [
+        { id: 'agent_local', name: 'Local', persona: 'A local model.', model: 'ollama:llama3.2' },
+      ],
+      workflow: [
+        {
+          step: 1,
+          type: 'sequential',
+          pause_after: false,
+          tasks: [
+            {
+              task_id: 'task_local',
+              agent_id: 'agent_local',
+              task_name: 'Local task',
+              instructions: ['Do it locally'],
+              constraints: [],
+              output_format: 'PlainText',
+              output_key: 'local_out',
+              input_mapping: [{ from_step: 0, from_agent_id: '__source__', label: 'Source' }],
+              enable_handover_note: false,
+            },
+          ],
+        },
+      ],
+    };
+    // No API keys provided — should still pass for Ollama models
+    const errors = validateWorkflow(ollamaConfig, validSource, {});
+    expect(errors.filter((e) => e.type === 'error')).toHaveLength(0);
+  });
 });

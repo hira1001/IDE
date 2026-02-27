@@ -6,9 +6,10 @@ import { useVSCode } from '../hooks/useVSCode.js';
 interface TemplateSaveDialogProps {
   config: WorkflowConfig;
   onClose: () => void;
+  onSaved?: () => void;
 }
 
-export function TemplateSaveDialog({ config, onClose }: TemplateSaveDialogProps) {
+export function TemplateSaveDialog({ config, onClose, onSaved }: TemplateSaveDialogProps) {
   const { t } = useTranslation();
   const { postMessage } = useVSCode();
   const [name, setName] = useState('');
@@ -28,7 +29,7 @@ export function TemplateSaveDialog({ config, onClose }: TemplateSaveDialogProps)
         location,
       },
     });
-    onClose();
+    onSaved ? onSaved() : onClose();
   };
 
   const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {

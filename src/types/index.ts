@@ -2,16 +2,9 @@
 
 // ─── LLM Models ───────────────────────────────────────────────────────────────
 
-export type LLMModel =
-  | 'gpt-4o'
-  | 'gpt-4o-mini'
-  | 'gpt-4-turbo'
-  | 'claude-sonnet-4-5'
-  | 'claude-haiku-4-5'
-  | 'claude-opus-4-5'
-  | 'gemini-1.5-pro'
-  | 'gemini-1.5-flash'
-  | 'gemini-2.0-flash';
+// Open string type — supports cloud models (gpt-*, claude-*, gemini-*)
+// and local models via Ollama (ollama:llama3.2, ollama:mistral, etc.)
+export type LLMModel = string;
 
 export type OutputFormat = 'Markdown' | 'Mermaid' | 'JSON' | 'PlainText' | 'Code';
 
@@ -235,6 +228,7 @@ export interface DryRunResult {
 export type WebviewMessageType =
   | 'workflow:generate'
   | 'workflow:execute'
+  | 'workflow:execute_from'
   | 'workflow:abort'
   | 'workflow:retry'
   | 'workflow:pause_resume'
@@ -244,9 +238,13 @@ export type WebviewMessageType =
   | 'template:save'
   | 'template:load'
   | 'template:list'
+  | 'template:export'
+  | 'template:import'
   | 'config:update'
   | 'source:get'
-  | 'output:open_tab';
+  | 'output:open_tab'
+  | 'output:save'
+  | 'clipboard:write';
 
 export interface WebviewMessage {
   type: WebviewMessageType;
