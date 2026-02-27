@@ -1,6 +1,5 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { v4 as uuidv4 } from 'uuid';
 import { WorkflowConfig, WorkflowStep, TaskState, Agent } from '../../types/index.js';
 import { StepBlock } from './StepBlock.js';
 

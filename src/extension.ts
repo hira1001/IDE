@@ -1,6 +1,4 @@
 import * as vscode from 'vscode';
-import * as path from 'path';
-import * as fs from 'fs';
 import { Orchestrator } from './orchestrator/orchestrator.js';
 import { DryRunner } from './orchestrator/dryRunner.js';
 import { validateWorkflow } from './orchestrator/validator.js';

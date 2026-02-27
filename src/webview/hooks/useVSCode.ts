@@ -18,6 +18,7 @@ function getVSCodeAPI(): VSCodeAPI {
     } catch {
       // Running outside VS Code (tests / storybook)
       _vscode = {
+        // eslint-disable-next-line no-console
         postMessage: (msg) => console.log('[mock vscode] postMessage', msg),
         getState: () => ({}),
         setState: () => {},

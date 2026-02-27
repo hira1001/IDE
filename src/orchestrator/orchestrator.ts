@@ -196,7 +196,7 @@ export class Orchestrator {
     step: WorkflowStep,
     config: WorkflowConfig,
     promptBuilder: PromptBuilder,
-    currentStepIndex: number
+    _currentStepIndex: number
   ): Promise<number | null> {
     if (!step.condition) return null;
 
@@ -337,7 +337,7 @@ export class Orchestrator {
     this.emit();
   }
 
-  private async handlePause(step: WorkflowStep, config: WorkflowConfig): Promise<void> {
+  private async handlePause(step: WorkflowStep, _config: WorkflowConfig): Promise<void> {
     this.stateManager.setStatus('paused');
     this.stateManager.log(step.step, '__orchestrator__', 'pause');
     this.emit();

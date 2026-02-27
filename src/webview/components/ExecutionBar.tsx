@@ -36,7 +36,6 @@ export function ExecutionBar({
 
   const isRunning = status === 'running';
   const isPaused = status === 'paused';
-  const isIdle = status === 'idle';
   const isFinished = status === 'completed' || status === 'error' || status === 'aborted';
 
   return (
