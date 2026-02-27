@@ -22,8 +22,8 @@ export function DryRunPanel({ result, onClose, onExecute }: DryRunPanelProps) {
           <div className="panel-card__header-left">
             <div className="panel-card__icon panel-card__icon--blue">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5"/>
-                <path d="M8 4.5v4l2.5 1.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+                <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5" />
+                <path d="M8 4.5v4l2.5 1.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
               </svg>
             </div>
             <div>
@@ -33,7 +33,7 @@ export function DryRunPanel({ result, onClose, onExecute }: DryRunPanelProps) {
           </div>
           <button className="panel-card__close" onClick={onClose} aria-label="Close">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+              <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
             </svg>
           </button>
         </div>
@@ -48,11 +48,17 @@ export function DryRunPanel({ result, onClose, onExecute }: DryRunPanelProps) {
             </span>
           </div>
           <div className="dry-run-summary__divider" />
-          <div className="dry-run-summary__stat">
+          <div className={`dry-run-summary__stat ${result.estimated_max_cost_usd > 1 ? 'dry-run-summary__stat--warning' : ''}`}>
             <span className="dry-run-summary__label">{t('dryrun.estimatedCost')}</span>
             <span className="dry-run-summary__value dry-run-summary__value--cost">
-              ${result.estimated_min_cost_usd.toFixed(4)}
-              <span className="dry-run-summary__range">–${result.estimated_max_cost_usd.toFixed(4)}</span>
+              {result.estimated_max_cost_usd === 0 && result.providers.includes('ollama') ? (
+                'Free (Local)'
+              ) : (
+                <>
+                  ${result.estimated_min_cost_usd.toFixed(4)}
+                  <span className="dry-run-summary__range">–${result.estimated_max_cost_usd.toFixed(4)}</span>
+                </>
+              )}
             </span>
           </div>
           <div className="dry-run-summary__divider" />
@@ -90,7 +96,7 @@ export function DryRunPanel({ result, onClose, onExecute }: DryRunPanelProps) {
                       className={`dry-run-task__chevron${expandedTask === task.task_id ? ' dry-run-task__chevron--open' : ''}`}
                       width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"
                     >
-                      <path d="M3.5 5.5L7 9l3.5-3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M3.5 5.5L7 9l3.5-3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                   </button>
 
@@ -121,7 +127,7 @@ export function DryRunPanel({ result, onClose, onExecute }: DryRunPanelProps) {
           <button className="btn btn--ghost" onClick={onClose}>{t('dryrun.close')}</button>
           <button className="btn btn--primary" onClick={onExecute}>
             <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
-              <path d="M2.5 2l9 4.5-9 4.5V2z" fill="currentColor"/>
+              <path d="M2.5 2l9 4.5-9 4.5V2z" fill="currentColor" />
             </svg>
             {t('dryrun.executeNow')}
           </button>

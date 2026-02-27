@@ -26,8 +26,8 @@ export function BreakpointPanel({ stepNumber, outputs, onContinue, onAbort }: Br
           <div className="panel-card__header-left">
             <div className="panel-card__icon panel-card__icon--amber">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <rect x="5.5" y="2" width="5" height="8" rx="1" stroke="currentColor" strokeWidth="1.5"/>
-                <path d="M8 12v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                <rect x="5.5" y="2" width="5" height="8" rx="1" stroke="currentColor" strokeWidth="1.5" />
+                <path d="M8 12v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
               </svg>
             </div>
             <div>
@@ -65,13 +65,13 @@ export function BreakpointPanel({ stepNumber, outputs, onContinue, onAbort }: Br
         <div className="panel-card__footer">
           <button className="btn btn--danger" onClick={onAbort}>
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-              <rect x="2" y="2" width="8" height="8" rx="1.5" fill="currentColor"/>
+              <rect x="2" y="2" width="8" height="8" rx="1.5" fill="currentColor" />
             </svg>
             {t('breakpoint.stop')}
           </button>
           <button className="btn btn--primary" onClick={() => onContinue(editedOutputs)}>
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-              <path d="M3 2l8 4-8 4V2z" fill="currentColor"/>
+              <path d="M3 2l8 4-8 4V2z" fill="currentColor" />
             </svg>
             {t('breakpoint.continue')}
           </button>

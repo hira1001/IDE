@@ -7,6 +7,7 @@ import { TemplateManager } from './services/templateManager.js';
 import { FileContextProvider } from './services/fileContextProvider.js';
 import { ProjectContextProvider } from './services/projectContextProvider.js';
 import { ApiKeys } from './llm/gateway.js';
+import { TextEncoder, TextDecoder } from 'util';
 import {
   WorkflowConfig,
   WebviewMessage,
@@ -18,6 +19,7 @@ import {
   SerializedExecutionState,
   OutputFormat,
   ProjectContextOptions,
+  ApplyOutputPayload,
 } from './types/index.js';
 
 const EXTENSION_ID = 'ai-agent-orchestrator';
@@ -27,7 +29,7 @@ let currentOrchestrator: Orchestrator | undefined;
 export function activate(context: vscode.ExtensionContext): void {
   const fileContextProvider = new FileContextProvider();
   const projectContextProvider = new ProjectContextProvider(fileContextProvider);
-  const templateManager = new TemplateManager();
+  const templateManager = new TemplateManager(context);
 
   // ─── Commands ────────────────────────────────────────────────────────────
 
@@ -211,12 +213,8 @@ async function handleWebviewMessage(
 
     case 'template:save': {
       const payload = message.payload as SaveTemplatePayload;
-      const workspaceDir = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-      const homeDir = process.env.HOME ?? process.env.USERPROFILE ?? '';
-      const baseDir = payload.location === 'global' ? homeDir : (workspaceDir ?? homeDir);
       const template = await templateManager.save({
         ...payload,
-        baseDir,
         scope: payload.location,
       });
       postMessage({ type: 'template:save', payload: { template } });
@@ -225,12 +223,7 @@ async function handleWebviewMessage(
     }
 
     case 'template:list': {
-      const workspaceDir = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-      const homeDir = process.env.HOME ?? process.env.USERPROFILE ?? '';
-      const templates = await templateManager.list({
-        workspace: workspaceDir,
-        global: homeDir,
-      });
+      const templates = await templateManager.list();
       postMessage({ type: 'template:list', payload: { templates } });
       break;
     }
@@ -248,9 +241,45 @@ async function handleWebviewMessage(
         filters: { 'Text files': ['md', 'txt', 'json'], 'All files': ['*'] },
       });
       if (uri) {
-        await vscode.workspace.fs.writeFile(uri, Buffer.from(payload.content, 'utf-8'));
+        const contentBytes = new TextEncoder().encode(payload.content);
+        await vscode.workspace.fs.writeFile(uri, contentBytes);
         vscode.window.showInformationMessage(`Output saved to ${uri.fsPath}`);
       }
+      break;
+    }
+
+    case 'output:apply': {
+      const payload = message.payload as ApplyOutputPayload;
+      const editor = vscode.window.activeTextEditor;
+
+      if (!editor) {
+        vscode.window.showErrorMessage('No active text editor found to apply changes.');
+        return;
+      }
+
+      const doc = editor.document;
+
+      // Create a temporary document with the new content for comparison
+      const uriParts = doc.uri.path.split('/');
+      const fileName = uriParts[uriParts.length - 1];
+      const tmpUri = vscode.Uri.parse(`untitled:AI_Suggested_${fileName}`);
+
+      // Open the untitled document with the suggested content
+      const tmpDoc = await vscode.workspace.openTextDocument(tmpUri);
+      const tmpEditor = await vscode.window.showTextDocument(tmpDoc, { preview: true, preserveFocus: true });
+
+      await tmpEditor.edit(editBuilder => {
+        editBuilder.insert(new vscode.Position(0, 0), payload.content);
+      });
+
+      // Open the VS Code native diff viewer
+      await vscode.commands.executeCommand(
+        'vscode.diff',
+        doc.uri,
+        tmpDoc.uri,
+        `Apply Output: ${fileName}`,
+        { preview: false }
+      );
       break;
     }
 
@@ -270,9 +299,7 @@ async function handleWebviewMessage(
 
     case 'template:export': {
       const payload = message.payload as { template_id: string };
-      const workspaceDir = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-      const homeDir = process.env.HOME ?? process.env.USERPROFILE ?? '';
-      const templates = await templateManager.list({ workspace: workspaceDir, global: homeDir });
+      const templates = await templateManager.list();
       const template = templates.find((t) => t.template_id === payload.template_id);
       if (template) {
         const uri = await vscode.window.showSaveDialog({
@@ -280,7 +307,8 @@ async function handleWebviewMessage(
           filters: { 'AAO Template': ['json'] },
         });
         if (uri) {
-          await vscode.workspace.fs.writeFile(uri, Buffer.from(JSON.stringify(template, null, 2), 'utf-8'));
+          const contentBytes = new TextEncoder().encode(JSON.stringify(template, null, 2));
+          await vscode.workspace.fs.writeFile(uri, contentBytes);
           vscode.window.showInformationMessage(`Template exported to ${uri.fsPath}`);
         }
       }
@@ -295,11 +323,9 @@ async function handleWebviewMessage(
       });
       if (uris && uris[0]) {
         const raw = await vscode.workspace.fs.readFile(uris[0]);
-        const workspaceDir = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        const homeDir = process.env.HOME ?? process.env.USERPROFILE ?? '';
-        const baseDir = workspaceDir ?? homeDir;
-        await templateManager.importFromJson(Buffer.from(raw).toString('utf-8'), baseDir);
-        const templates = await templateManager.list({ workspace: workspaceDir, global: homeDir });
+        const content = new TextDecoder('utf-8').decode(raw);
+        await templateManager.importFromJson(content);
+        const templates = await templateManager.list();
         postMessage({ type: 'template:list', payload: { templates } });
         vscode.window.showInformationMessage('Template imported successfully.');
       }
@@ -395,7 +421,7 @@ async function handleExecuteWorkflow(
       // Show VS Code notification on error (dual notification per design)
       if (state.status === 'error') {
         vscode.window.showErrorMessage('AI Agent: An error occurred during workflow execution.', 'Show Panel')
-          .then((selection) => {
+          .then((selection: string | undefined) => {
             if (selection === 'Show Panel') {
               currentPanel?.reveal();
             }
@@ -434,12 +460,35 @@ function getContextOptions(context: vscode.ExtensionContext): ProjectContextOpti
   return { mode, tokenBudget };
 }
 
-// ─── API Key Management ───────────────────────────────────────────────────────
+// ─── API Key Management (With Fallback) ────────────────────────────────────────
+
+const FALLBACK_SECRET_PREFIX = 'aao.secret.fallback.';
+
+async function safeSecretsGet(context: vscode.ExtensionContext, key: string): Promise<string | undefined> {
+  try {
+    const val = await context.secrets.get(key);
+    if (val !== undefined) return val;
+  } catch (err) {
+    console.warn(`[Extension] SecretStorage get failed for ${key}, trying fallback`, err);
+  }
+  return context.globalState.get<string>(FALLBACK_SECRET_PREFIX + key);
+}
+
+async function safeSecretsStore(context: vscode.ExtensionContext, key: string, value: string): Promise<void> {
+  try {
+    await context.secrets.store(key, value);
+    // Remove from fallback if successfully stored in SecretStorage
+    await context.globalState.update(FALLBACK_SECRET_PREFIX + key, undefined);
+  } catch (err) {
+    console.warn(`[Extension] SecretStorage store failed for ${key}, using fallback`, err);
+    await context.globalState.update(FALLBACK_SECRET_PREFIX + key, value);
+  }
+}
 
 async function getApiKeys(context: vscode.ExtensionContext): Promise<ApiKeys> {
-  const openai = await context.secrets.get('aiAgentOrchestrator.openaiKey');
-  const anthropic = await context.secrets.get('aiAgentOrchestrator.anthropicKey');
-  const google = await context.secrets.get('aiAgentOrchestrator.googleKey');
+  const openai = await safeSecretsGet(context, 'aiAgentOrchestrator.openaiKey');
+  const anthropic = await safeSecretsGet(context, 'aiAgentOrchestrator.anthropicKey');
+  const google = await safeSecretsGet(context, 'aiAgentOrchestrator.googleKey');
   const ollamaEndpoint = vscode.workspace
     .getConfiguration('aiAgentOrchestrator')
     .get<string>('ollamaEndpoint', 'http://localhost:11434');
@@ -459,7 +508,7 @@ async function configureApiKeys(context: vscode.ExtensionContext): Promise<void>
   ];
 
   for (const provider of providers) {
-    const current = await context.secrets.get(provider.secretKey);
+    const current = await safeSecretsGet(context, provider.secretKey);
     const input = await vscode.window.showInputBox({
       title: `Configure ${provider.name} API Key`,
       prompt: `Enter your ${provider.name} API key (leave empty to skip)`,
@@ -469,7 +518,7 @@ async function configureApiKeys(context: vscode.ExtensionContext): Promise<void>
     });
 
     if (input !== undefined && input !== '' && input !== '••••••••') {
-      await context.secrets.store(provider.secretKey, input);
+      await safeSecretsStore(context, provider.secretKey, input);
       vscode.window.showInformationMessage(`${provider.name} API key saved.`);
     }
   }
@@ -490,7 +539,7 @@ async function openOutputTab(content: string, format: OutputFormat, filename: st
   const doc = await vscode.workspace.openTextDocument(uri);
   const editor = await vscode.window.showTextDocument(doc, vscode.ViewColumn.One);
 
-  await editor.edit((editBuilder) => {
+  await editor.edit((editBuilder: vscode.TextEditorEdit) => {
     editBuilder.insert(new vscode.Position(0, 0), content);
   });
 

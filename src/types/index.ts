@@ -73,6 +73,7 @@ export interface WorkflowConfig {
 
 export interface SourceInput {
   content: string;
+  isSelection?: boolean;
   filename: string;
   language_id: string;
   line_count: number;
@@ -304,6 +305,7 @@ export type WebviewMessageType =
   | 'context:set_mode'
   | 'output:open_tab'
   | 'output:save'
+  | 'output:apply'
   | 'clipboard:write';
 
 export interface WebviewMessage {
@@ -394,4 +396,9 @@ export interface OpenTabPayload {
   content: string;
   format: OutputFormat;
   filename: string;
+}
+
+// output:apply payload
+export interface ApplyOutputPayload {
+  content: string;
 }

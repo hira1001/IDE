@@ -219,7 +219,13 @@ export class Orchestrator {
       return this.runTask(task, agent, step.step, config, promptBuilder);
     });
 
-    await Promise.all(tasks);
+    const results = await Promise.allSettled(tasks);
+
+    // Log if any tasks in the parallel group failed unexpectedly
+    const failures = results.filter((r) => r.status === 'rejected');
+    if (failures.length > 0) {
+      console.warn(`[Orchestrator] ${failures.length} tasks failed in parallel step ${step.step}`);
+    }
   }
 
   private async runSequentialStep(
@@ -303,8 +309,8 @@ export class Orchestrator {
       const gateway = getGateway(agent.model, this.options.apiKeys);
       const start = Date.now();
 
-      let response = await this.callWithTimeout(
-        gateway.chat({ model: agent.model, system_prompt: systemPrompt, user_prompt: userPrompt }),
+      let response = await this.callWithRetry(
+        () => gateway.chat({ model: agent.model, system_prompt: systemPrompt, user_prompt: userPrompt }),
         this.timeout
       );
 
@@ -324,8 +330,8 @@ export class Orchestrator {
         // so the model retains all input data (source file, previous agent outputs)
         const retryInstruction = promptBuilder.buildRetryPrompt(response.content, task.output_format);
         const retryUserPrompt = userPrompt + '\n\n' + retryInstruction;
-        response = await this.callWithTimeout(
-          gateway.chat({ model: agent.model, system_prompt: systemPrompt, user_prompt: retryUserPrompt }),
+        response = await this.callWithRetry(
+          () => gateway.chat({ model: agent.model, system_prompt: systemPrompt, user_prompt: retryUserPrompt }),
           this.timeout
         );
 
@@ -416,6 +422,50 @@ export class Orchestrator {
       };
       check();
     });
+  }
+
+  private async callWithRetry<T>(
+    apiCall: () => Promise<T>,
+    timeoutMs: number,
+    maxRetries = 3,
+    baseDelayMs = 2000
+  ): Promise<T> {
+    let attempt = 0;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      try {
+        return await this.callWithTimeout(apiCall(), timeoutMs);
+      } catch (err) {
+        attempt++;
+        const errMessage = err instanceof Error ? err.message : String(err);
+        const isAbort = err instanceof Error && err.name === 'AbortError';
+
+        // Do not retry on AbortError or terminal client errors (e.g., 400 Bad Request, 401 Unauthorized)
+        // Retry on 429 Too Many Requests, 500, 502, 503, 504 and network timeouts.
+        if (
+          isAbort ||
+          attempt > maxRetries ||
+          (errMessage.includes('400') || errMessage.includes('401') || errMessage.includes('403')) && !errMessage.includes('429')
+        ) {
+          throw err;
+        }
+
+        // Exponential backoff with jitter
+        const jitter = Math.random() * 500;
+        const delay = baseDelayMs * Math.pow(2, attempt - 1) + jitter;
+
+        console.warn(`[Orchestrator] API call failed, retrying in ${Math.round(delay)}ms (Attempt ${attempt}/${maxRetries}). Error: ${errMessage}`);
+
+        await new Promise((resolve) => setTimeout(resolve, delay));
+
+        // Ensure abort wasn't called during the sleep
+        if (this.stateManager.getStatus() === 'aborted') {
+          const abortErr = new Error('Workflow aborted');
+          abortErr.name = 'AbortError';
+          throw abortErr;
+        }
+      }
+    }
   }
 
   private callWithTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {

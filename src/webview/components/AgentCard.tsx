@@ -365,6 +365,12 @@ export function AgentCard({
                   💾
                 </button>
                 <button className="btn btn--ghost btn--xs"
+                  onClick={() => postMessage({ type: 'output:apply', payload: { content: output } })}
+                  title="Apply changes to active editor (Diff)"
+                  aria-label="Apply changes">
+                  ✨ Apply
+                </button>
+                <button className="btn btn--ghost btn--xs"
                   onClick={() => setEditingOutput((v) => !v)}>
                   {editingOutput ? '✓ Done' : '✏️ Edit'}
                 </button>
@@ -372,7 +378,7 @@ export function AgentCard({
 
               {editingOutput
                 ? <textarea className="field-textarea field-textarea--mono" rows={7}
-                    value={editedOutput} onChange={(e) => setEditedOutput(e.target.value)} />
+                  value={editedOutput} onChange={(e) => setEditedOutput(e.target.value)} />
                 : <div className="agent-card__output-preview">{output}</div>
               }
 

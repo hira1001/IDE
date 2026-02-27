@@ -11,6 +11,7 @@ export class FileContextProvider {
   /**
    * Snapshot the currently active VS Code editor.
    * Returns null if no editor is open.
+   * Retrieves selected text, otherwise whole file content.
    * Truncates content if > 100KB.
    */
   getActiveFileSnapshot(): SourceInput | null {
@@ -27,8 +28,22 @@ export class FileContextProvider {
     if (!editor) return null;
 
     const document = editor.document;
-    let content = document.getText();
-    const byteSize = Buffer.byteLength(content, 'utf-8');
+
+    // Get selected text if any, otherwise entire document
+    const selection = editor.selection;
+    let content = '';
+    let isSelection = false;
+
+    if (!selection.isEmpty) {
+      content = document.getText(selection);
+      isSelection = true;
+    } else {
+      content = document.getText();
+    }
+
+    // Using TextEncoder to avoid Buffer dependency
+    const contentBytes = new TextEncoder().encode(content);
+    const byteSize = contentBytes.length;
     let truncated = false;
 
     if (byteSize > MAX_BYTES) {
@@ -41,11 +56,12 @@ export class FileContextProvider {
 
     return {
       content,
-      filename: document.fileName.split('/').pop() ?? document.fileName,
+      isSelection,
+      filename: document.fileName.split(/[/\\]/).pop() ?? document.fileName,
       language_id: document.languageId,
-      line_count: document.lineCount,
+      line_count: content.split('\n').length,
       byte_size: byteSize,
-      ...(truncated ? { truncated: true } as unknown as Record<string, unknown> : {}),
+      ...(truncated ? { truncated: true } : {}),
     } as SourceInput;
   }
 }

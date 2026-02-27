@@ -138,5 +138,82 @@ export function validateWorkflow(
     errors.push({ type: 'error', message: `Model validation error: ${(err as Error).message}` });
   }
 
+  // Check for logical infinite loops (cycle detection)
+  const cycleErrors = detectCycles(config);
+  errors.push(...cycleErrors);
+
+  return errors;
+}
+
+/**
+ * Detect static infinite loops in the workflow step graph.
+ * A cycle is an error if there is no structural way to break out of it
+ * (e.g., an unconditional `then_goto` pointing backwards without a conditional branch).
+ */
+function detectCycles(config: WorkflowConfig): ValidationError[] {
+  const errors: ValidationError[] = [];
+  const edges: Map<number, number[]> = new Map();
+
+  // 1. Build adjacency list for the state machine
+  for (let i = 0; i < config.workflow.length; i++) {
+    const step = config.workflow[i];
+    const nextEdges: number[] = [];
+
+    if (step.then_goto !== undefined) {
+      // Unconditional jump overrides normal linear flow
+      nextEdges.push(step.then_goto);
+    } else {
+      // Default linear flow
+      const nextStep = i + 1 < config.workflow.length ? config.workflow[i + 1].step : undefined;
+      if (nextStep !== undefined) {
+        nextEdges.push(nextStep);
+      }
+
+      // Conditional fail jump
+      if (step.type === 'conditional' && step.on_fail_goto !== undefined) {
+        nextEdges.push(step.on_fail_goto);
+      }
+    }
+    edges.set(step.step, nextEdges);
+  }
+
+  // 2. DFS for cycle detection
+  const visited = new Set<number>();
+  const recursionStack = new Set<number>();
+
+  function dfs(node: number, path: number[]): void {
+    if (recursionStack.has(node)) {
+      // Avoid reporting the exact same cycle multiple times
+      // We only flag cycles caused purely by tight Unconditional loops,
+      // since conditional loops break on max_loops internally.
+      // But for safety, we warn on *any* backward cycle.
+      const cyclePath = [...path, node].join(' -> ');
+      errors.push({
+        type: 'warning',
+        message: `Potential infinite loop / cycle detected in control flow: ${cyclePath}. Ensure the loop has a termination condition.`,
+        step: node,
+      });
+      return;
+    }
+    if (visited.has(node)) return;
+
+    visited.add(node);
+    recursionStack.add(node);
+    path.push(node);
+
+    const nextNodes = edges.get(node) ?? [];
+    for (const next of nextNodes) {
+      dfs(next, path);
+    }
+
+    path.pop();
+    recursionStack.delete(node);
+  }
+
+  // Always start execution from the first step in the config
+  if (config.workflow.length > 0) {
+    dfs(config.workflow[0].step, []);
+  }
+
   return errors;
 }
