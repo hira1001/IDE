@@ -1,0 +1,27 @@
+# Source files (bundled into dist/)
+src/**
+
+# Config/build files
+.vscode/**
+.vscode-test/**
+.github/**
+.eslintrc.js
+.prettierrc
+*.config.ts
+tsconfig*.json
+esbuild.js
+
+# Test files
+**/*.test.ts
+**/*.spec.ts
+coverage/**
+
+# Dev artifacts
+node_modules/**
+.env
+*.log
+
+# Docs (not needed at runtime)
+docs/**
+CONTRIBUTING.md
+CHANGELOG.md
