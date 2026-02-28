@@ -149,6 +149,9 @@ export function AgentCard({
 
   // Fetch VS Code LM models once on mount (5s timeout in case host never responds)
   useEffect(() => {
+    // Set timer BEFORE postMessage to avoid a race where the host responds
+    // synchronously before the timer variable is assigned.
+    const timer = setTimeout(() => window.removeEventListener('message', handler), 5000);
     const handler = (event: MessageEvent) => {
       const msg = event.data as { type: string; payload?: unknown };
       if (msg.type !== 'lm:models_list') return;
@@ -159,7 +162,6 @@ export function AgentCard({
     };
     window.addEventListener('message', handler);
     postMessage({ type: 'lm:models_list' });
-    const timer = setTimeout(() => window.removeEventListener('message', handler), 5000);
     return () => { clearTimeout(timer); window.removeEventListener('message', handler); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

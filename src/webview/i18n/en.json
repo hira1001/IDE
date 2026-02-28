@@ -87,7 +87,8 @@
     },
     "agentMode": "Agent Mode (ReAct loop with tools)",
     "autoApplyEdits": "Auto-apply file edits",
-    "maxToolIterations": "Max tool iterations"
+    "maxToolIterations": "Max tool iterations",
+    "allowedTools": "Allowed tools (all if none selected)"
   },
   "dryrun": {
     "title": "Dry Run Preview",

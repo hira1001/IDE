@@ -87,7 +87,8 @@
     },
     "agentMode": "エージェントモード（ツール付きReActループ）",
     "autoApplyEdits": "ファイル編集を自動適用",
-    "maxToolIterations": "最大ツール反復回数"
+    "maxToolIterations": "最大ツール反復回数",
+    "allowedTools": "使用ツール（未選択の場合は全ツール）"
   },
   "dryrun": {
     "title": "ドライラン結果",
