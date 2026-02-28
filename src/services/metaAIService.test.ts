@@ -52,6 +52,93 @@ Hope it helps!`;
             mockChat.mockResolvedValueOnce({ content: '{"agents": []}' }); // missing workflow
             await expect(service.generateWorkflow('do something', null)).rejects.toThrow(/Invalid WorkflowConfig/);
         });
+
+        it('uses temperature 0.2 for deterministic JSON output', async () => {
+            mockChat.mockResolvedValueOnce({ content: JSON.stringify(validConfig) });
+            await service.generateWorkflow('do something', null);
+            const callArgs = mockChat.mock.calls[0][0] as { temperature: number };
+            expect(callArgs.temperature).toBe(0.2);
+        });
+
+        it('interpolates source context into system prompt', async () => {
+            mockChat.mockResolvedValueOnce({ content: JSON.stringify(validConfig) });
+            await service.generateWorkflow('do something', {
+                filename: 'app.ts',
+                language_id: 'typescript',
+                line_count: 42,
+                content: '',
+            });
+            const callArgs = mockChat.mock.calls[0][0] as { system_prompt: string };
+            expect(callArgs.system_prompt).toContain('app.ts');
+            expect(callArgs.system_prompt).toContain('typescript');
+            expect(callArgs.system_prompt).toContain('42');
+        });
+    });
+
+    describe('validateConfig() — enhanced semantic checks', () => {
+        const makeConfig = (overrides: Partial<WorkflowConfig>): WorkflowConfig => ({
+            agents: [{ id: 'agent_001', name: 'A', persona: 'P', model: 'gpt-4o' }],
+            workflow: [
+                {
+                    step: 1, type: 'sequential', pause_after: false,
+                    tasks: [{
+                        task_id: 'task_001', agent_id: 'agent_001', task_name: 'T',
+                        instructions: ['Do X'], constraints: [], output_format: 'Markdown',
+                        output_key: 'result', input_mapping: [], enable_handover_note: false,
+                    }],
+                },
+            ],
+            ...overrides,
+        });
+
+        it('accepts a fully valid config', async () => {
+            mockChat.mockResolvedValueOnce({ content: JSON.stringify(makeConfig({})) });
+            await expect(service.generateWorkflow('x', null)).resolves.toBeDefined();
+        });
+
+        it('rejects a task referencing an unknown agent_id', async () => {
+            const cfg = makeConfig({});
+            cfg.workflow[0].tasks[0].agent_id = 'agent_999';
+            mockChat.mockResolvedValueOnce({ content: JSON.stringify(cfg) });
+            await expect(service.generateWorkflow('x', null)).rejects.toThrow(/unknown agent_id/);
+        });
+
+        it('rejects duplicate output_key across tasks', async () => {
+            const cfg = makeConfig({});
+            cfg.workflow[0].tasks.push({
+                task_id: 'task_002', agent_id: 'agent_001', task_name: 'T2',
+                instructions: ['Do Y'], constraints: [], output_format: 'Markdown',
+                output_key: 'result', // same as task_001
+                input_mapping: [], enable_handover_note: false,
+            });
+            mockChat.mockResolvedValueOnce({ content: JSON.stringify(cfg) });
+            await expect(service.generateWorkflow('x', null)).rejects.toThrow(/Duplicate output_key/);
+        });
+
+        it('rejects input_mapping referencing a non-existent step', async () => {
+            const cfg = makeConfig({});
+            cfg.workflow[0].tasks[0].input_mapping = [
+                { from_step: 99, from_agent_id: 'agent_001', label: 'ghost step' },
+            ];
+            mockChat.mockResolvedValueOnce({ content: JSON.stringify(cfg) });
+            await expect(service.generateWorkflow('x', null)).rejects.toThrow(/non-existent step 99/);
+        });
+
+        it('allows input_mapping from_step: 0 (source file) without error', async () => {
+            const cfg = makeConfig({});
+            cfg.workflow[0].tasks[0].input_mapping = [
+                { from_step: 0, from_agent_id: '__source__', label: 'Source' },
+            ];
+            mockChat.mockResolvedValueOnce({ content: JSON.stringify(cfg) });
+            await expect(service.generateWorkflow('x', null)).resolves.toBeDefined();
+        });
+
+        it('rejects a task with an empty instructions array', async () => {
+            const cfg = makeConfig({});
+            cfg.workflow[0].tasks[0].instructions = [];
+            mockChat.mockResolvedValueOnce({ content: JSON.stringify(cfg) });
+            await expect(service.generateWorkflow('x', null)).rejects.toThrow(/no instructions/);
+        });
     });
 
     describe('draftAgentInstruction()', () => {
