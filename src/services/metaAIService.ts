@@ -23,16 +23,14 @@ DECOMPOSITION RULES:
    - from_step: N, from_agent_id: "agent_XXX" → the output_key produced by that agent in step N
    - Tasks in step 2 that depend on step 1 output MUST use "sequential" type.
 5. Set pause_after: true only for steps requiring human review before continuing.
-6. Assign the most appropriate model per agent:
-   - Complex reasoning / architecture → gpt-4o or claude-sonnet-4-6
-   - Fast iteration / summaries → gpt-4o-mini or claude-haiku-4-5
-   - Long-context tasks → gemini-1.5-pro or gemini-2.0-flash
+6. Assign the most appropriate model per agent using ONLY models from the AVAILABLE MODELS list:
+   - Complex reasoning / architecture → most capable available model
+   - Fast iteration / summaries → fastest available model
+   - Long-context tasks → highest context-window model available
 7. Every agent must have a clear persona describing their specialty.
 
 AVAILABLE MODELS:
-- OpenAI: gpt-4o, gpt-4o-mini, o3-mini
-- Anthropic: claude-opus-4-6, claude-sonnet-4-6, claude-haiku-4-5
-- Google: gemini-2.0-flash, gemini-1.5-pro, gemini-1.5-flash
+{{available_models}}
 
 OUTPUT FORMAT:
 Output ONLY the JSON object below. No markdown fences, no explanation.
@@ -96,11 +94,21 @@ export class MetaAIService {
     private readonly model: LLMModel = 'gpt-4o'
   ) {}
 
+  private buildAvailableModelsSection(): string {
+    const lines: string[] = [];
+    if (this.apiKeys.openai)    lines.push('- OpenAI: gpt-4o, gpt-4o-mini');
+    if (this.apiKeys.anthropic) lines.push('- Anthropic: claude-opus-4-6, claude-sonnet-4-6, claude-haiku-4-5');
+    if (this.apiKeys.google)    lines.push('- Google: gemini-2.0-flash, gemini-1.5-pro, gemini-1.5-flash');
+    if (this.apiKeys.ollama)    lines.push('- Local (Ollama): use "ollama:<model>" prefix, e.g. "ollama:llama3.2"');
+    return lines.length > 0 ? lines.join('\n') : '- OpenAI: gpt-4o, gpt-4o-mini';
+  }
+
   async generateWorkflow(instruction: string, source: SourceInput | null): Promise<WorkflowConfig> {
     const systemPrompt = META_AI_SYSTEM_PROMPT_TEMPLATE
       .replace('{{filename}}', source?.filename ?? '(none)')
       .replace('{{language_id}}', source?.language_id ?? 'unknown')
-      .replace('{{line_count}}', String(source?.line_count ?? 0));
+      .replace('{{line_count}}', String(source?.line_count ?? 0))
+      .replace('{{available_models}}', this.buildAvailableModelsSection());
 
     const userPrompt = `Design a workflow for the following request:\n\n${instruction}`;
 
