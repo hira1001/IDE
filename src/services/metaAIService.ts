@@ -104,11 +104,17 @@ export class MetaAIService {
   }
 
   async generateWorkflow(instruction: string, source: SourceInput | null): Promise<WorkflowConfig> {
+    const filename = source?.filename ?? '(none)';
+    const languageId = source?.language_id ?? 'unknown';
+    const lineCount = String(source?.line_count ?? 0);
+    const modelsSection = this.buildAvailableModelsSection();
+    // Use replacer functions so `$` characters in values aren't misinterpreted
+    // by String.replace (e.g. `$&`, `$'`, `$n` have special meaning in replacement strings)
     const systemPrompt = META_AI_SYSTEM_PROMPT_TEMPLATE
-      .replace('{{filename}}', source?.filename ?? '(none)')
-      .replace('{{language_id}}', source?.language_id ?? 'unknown')
-      .replace('{{line_count}}', String(source?.line_count ?? 0))
-      .replace('{{available_models}}', this.buildAvailableModelsSection());
+      .replace('{{filename}}', () => filename)
+      .replace('{{language_id}}', () => languageId)
+      .replace('{{line_count}}', () => lineCount)
+      .replace('{{available_models}}', () => modelsSection);
 
     const userPrompt = `Design a workflow for the following request:\n\n${instruction}`;
 

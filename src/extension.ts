@@ -136,7 +136,7 @@ export function activate(context: vscode.ExtensionContext): void {
           vscode.window.showErrorMessage('aiAgentOrchestrator.runPrompt: prompt exceeds 50,000 character limit.');
           return undefined;
         }
-        const VALID_PREFIXES = ['gpt-', 'claude-', 'gemini-', 'ollama:', 'vscode:'];
+        const VALID_PREFIXES = ['gpt-', 'o1', 'o3', 'claude-', 'gemini-', 'ollama:', 'vscode:'];
         const model = args.model ?? 'gpt-4o';
         if (!VALID_PREFIXES.some((p) => model.startsWith(p))) {
           vscode.window.showErrorMessage(`aiAgentOrchestrator.runPrompt: unknown model prefix for "${model}".`);
@@ -871,15 +871,12 @@ async function configureApiKeys(context: vscode.ExtensionContext): Promise<void>
 
 // ─── Settings Helpers ─────────────────────────────────────────────────────────
 
-async function getAvailableModels(context: vscode.ExtensionContext): Promise<AvailableModels> {
-  const openaiKey = await safeSecretsGet(context, 'aiAgentOrchestrator.openaiKey');
-  const anthropicKey = await safeSecretsGet(context, 'aiAgentOrchestrator.anthropicKey');
-  const googleKey = await safeSecretsGet(context, 'aiAgentOrchestrator.googleKey');
-
-  const ollamaEndpoint = vscode.workspace
-    .getConfiguration('aiAgentOrchestrator')
-    .get<string>('ollamaEndpoint', 'http://localhost:11434');
-
+async function getAvailableModels(
+  openaiKey: string | undefined,
+  anthropicKey: string | undefined,
+  googleKey: string | undefined,
+  ollamaEndpoint: string
+): Promise<AvailableModels> {
   let ollamaModels: string[] = [];
   try {
     const res = await fetch(`${ollamaEndpoint.replace(/\/+$/, '')}/api/tags`, {
@@ -894,11 +891,11 @@ async function getAvailableModels(context: vscode.ExtensionContext): Promise<Ava
   const vscodeLMModels = await listVscodeLMModels(vscode as unknown as VscodeLMApi);
 
   return {
-    openai:   openaiKey    ? OPENAI_MODELS    : [],
+    openai:    openaiKey    ? OPENAI_MODELS    : [],
     anthropic: anthropicKey ? ANTHROPIC_MODELS : [],
-    google:   googleKey    ? GOOGLE_MODELS    : [],
-    ollama:   ollamaModels,
-    vscodeLM: vscodeLMModels,
+    google:    googleKey    ? GOOGLE_MODELS    : [],
+    ollama:    ollamaModels,
+    vscodeLM:  vscodeLMModels,
   };
 }
 
@@ -911,13 +908,15 @@ async function buildSettingsCurrent(context: vscode.ExtensionContext): Promise<{
   defaultModel: string;
   availableModels: AvailableModels;
 }> {
-  const openaiKey = await safeSecretsGet(context, 'aiAgentOrchestrator.openaiKey');
-  const anthropicKey = await safeSecretsGet(context, 'aiAgentOrchestrator.anthropicKey');
-  const googleKey = await safeSecretsGet(context, 'aiAgentOrchestrator.googleKey');
+  const [openaiKey, anthropicKey, googleKey] = await Promise.all([
+    safeSecretsGet(context, 'aiAgentOrchestrator.openaiKey'),
+    safeSecretsGet(context, 'aiAgentOrchestrator.anthropicKey'),
+    safeSecretsGet(context, 'aiAgentOrchestrator.googleKey'),
+  ]);
   const cfg = vscode.workspace.getConfiguration('aiAgentOrchestrator');
   const ollamaEndpoint = cfg.get<string>('ollamaEndpoint', 'http://localhost:11434');
   const defaultModel = cfg.get<string>('defaultModel', 'gpt-4o');
-  const availableModels = await getAvailableModels(context);
+  const availableModels = await getAvailableModels(openaiKey, anthropicKey, googleKey, ollamaEndpoint);
   const vscodeLMCount = availableModels.vscodeLM.length;
   return {
     openai:    openaiKey    ? 'set' : 'unset',
@@ -942,9 +941,11 @@ async function autoUpdateDefaultModel(
   const isAnthropic = ANTHROPIC_MODELS.includes(currentDefault) || currentDefault.startsWith('claude-');
   const isGoogle    = GOOGLE_MODELS.includes(currentDefault) || currentDefault.startsWith('gemini-');
 
-  const openaiKey    = await safeSecretsGet(context, 'aiAgentOrchestrator.openaiKey');
-  const anthropicKey = await safeSecretsGet(context, 'aiAgentOrchestrator.anthropicKey');
-  const googleKey    = await safeSecretsGet(context, 'aiAgentOrchestrator.googleKey');
+  const [openaiKey, anthropicKey, googleKey] = await Promise.all([
+    safeSecretsGet(context, 'aiAgentOrchestrator.openaiKey'),
+    safeSecretsGet(context, 'aiAgentOrchestrator.anthropicKey'),
+    safeSecretsGet(context, 'aiAgentOrchestrator.googleKey'),
+  ]);
 
   // If current default is already from a working provider, don't change it
   if (isOpenAI && openaiKey) return;
