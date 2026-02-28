@@ -138,6 +138,12 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
       ]
     : [];
 
+  // For the Ollama section: prefer fresh models from the latest test result over stale settings
+  const ollamaDisplayModels =
+    (ollamaStatus && ollamaStatus !== 'testing' && ollamaStatus.ok && ollamaStatus.models?.length)
+      ? ollamaStatus.models
+      : settings?.availableModels.ollama ?? [];
+
   return (
     <div
       className="modal-overlay"
@@ -298,22 +304,17 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                   : `❌ ${ollamaStatus.error}`}
               </div>
             )}
-            {(() => {
-              const displayModels = (ollamaStatus && ollamaStatus !== 'testing' && ollamaStatus.ok && ollamaStatus.models && ollamaStatus.models.length > 0)
-                ? ollamaStatus.models
-                : settings?.availableModels.ollama ?? [];
-              return displayModels.length > 0 ? (
-                <div className="settings-ollama-models">
-                  <span style={{ fontSize: 11, color: 'var(--aao-muted)' }}>Available models: </span>
-                  {displayModels.slice(0, 5).map((m) => (
-                    <span key={m} className="settings-model-chip">{m}</span>
-                  ))}
-                  {displayModels.length > 5 && (
-                    <span className="settings-model-chip">+{displayModels.length - 5} more</span>
-                  )}
-                </div>
-              ) : null;
-            })()}
+            {ollamaDisplayModels.length > 0 && (
+              <div className="settings-ollama-models">
+                <span style={{ fontSize: 11, color: 'var(--aao-muted)' }}>Available models: </span>
+                {ollamaDisplayModels.slice(0, 5).map((m) => (
+                  <span key={m} className="settings-model-chip">{m}</span>
+                ))}
+                {ollamaDisplayModels.length > 5 && (
+                  <span className="settings-model-chip">+{ollamaDisplayModels.length - 5} more</span>
+                )}
+              </div>
+            )}
           </section>
 
           {/* ── VS Code LM ── */}
