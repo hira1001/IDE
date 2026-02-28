@@ -197,6 +197,9 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                       onChange={(e) => {
                         setInputs((i) => ({ ...i, [id]: e.target.value }));
                       }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && inputVal.trim()) handleSaveKey(id);
+                      }}
                     />
                     <button
                       className="btn btn--primary btn--sm"

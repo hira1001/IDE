@@ -67,7 +67,12 @@ export function AgentCard({
   const [elapsed, setElapsed] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const streamingRef = useRef<HTMLDivElement>(null);
-  const [useCustomModel, setUseCustomModel] = useState(false);
+  // Start in custom-input mode if current model isn't in any known group
+  const [useCustomModel, setUseCustomModel] = useState(() => {
+    const m = availableModels ?? EMPTY_AVAILABLE_MODELS;
+    const known = [...m.openai, ...m.anthropic, ...m.google, ...m.ollama, ...m.vscodeLM];
+    return known.length > 0 && !known.includes(agent.model);
+  });
 
   // Fullscreen instruction modal
   const [showInstructionModal, setShowInstructionModal] = useState(false);
