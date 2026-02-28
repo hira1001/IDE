@@ -368,6 +368,23 @@ async function handleWebviewMessage(
       break;
     }
 
+    case 'template:delete': {
+      const payload = message.payload as { template_id: string; name: string };
+      const answer = await vscode.window.showWarningMessage(
+        `Delete template "${payload.name}"? This cannot be undone.`,
+        { modal: true },
+        'Delete'
+      );
+      if (answer === 'Delete') {
+        const deleted = await templateManager.deleteById(payload.template_id);
+        if (deleted) {
+          const templates = await templateManager.list();
+          postMessage({ type: 'template:list', payload: { templates } });
+        }
+      }
+      break;
+    }
+
     default:
       console.warn('[Extension] Unknown message type:', message.type);
   }

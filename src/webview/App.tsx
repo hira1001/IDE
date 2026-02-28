@@ -131,6 +131,7 @@ export function App() {
     manualEditOutput,
     loadTemplates,
     setConfig,
+    clearWorkflow,
     clearDryRun,
     setContextMode,
     refreshContext,
@@ -347,6 +348,18 @@ export function App() {
                 <path d="M3 3h8l2 2v8H3V3z" stroke="currentColor" strokeWidth="1.4"/>
                 <rect x="5.5" y="3" width="4" height="3.5" rx="0.5" stroke="currentColor" strokeWidth="1.2"/>
                 <path d="M5 10h6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+              </svg>
+            </button>
+          )}
+          {config && (status === 'idle' || status === 'completed' || status === 'error') && (
+            <button
+              className="btn btn--icon-only btn--danger-hover"
+              onClick={clearWorkflow}
+              title={t('app.clearWorkflow') || 'Clear workflow'}
+              aria-label={t('app.clearWorkflow') || 'Clear workflow'}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
               </svg>
             </button>
           )}

@@ -111,6 +111,18 @@ export function AgentCard({
 
   useEffect(() => { setEditedOutput(output ?? ''); }, [output]);
 
+  // Close modals on Escape key
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (showOutputModal) { setShowOutputModal(false); return; }
+      if (showInstructionModal) { setShowInstructionModal(false); return; }
+      if (showDraftPanel) { setShowDraftPanel(false); }
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [showOutputModal, showInstructionModal, showDraftPanel]);
+
   // Auto-expand when task enters error state
   useEffect(() => {
     if (status === 'error') setExpanded(true);

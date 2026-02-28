@@ -251,6 +251,13 @@ export function useWorkflowState() {
     postMessage({ type: 'context:get' });
   }, [postMessage]);
 
+  const clearWorkflow = useCallback(() => {
+    historyRef.current = [];
+    historyIndexRef.current = -1;
+    setHistorySize({ canUndo: false, canRedo: false });
+    setState((s) => ({ ...s, config: null, executionState: null, dryRunResult: null }));
+  }, []);
+
   return {
     ...state,
     generateWorkflow,
@@ -263,6 +270,7 @@ export function useWorkflowState() {
     manualEditOutput,
     loadTemplates,
     setConfig,
+    clearWorkflow,
     clearDryRun,
     setContextMode,
     refreshContext,

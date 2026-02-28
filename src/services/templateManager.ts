@@ -106,6 +106,36 @@ export class TemplateManager {
     await vscode.workspace.fs.delete(fileUri);
   }
 
+  /** Delete a template by its template_id, searching both workspace and global dirs. */
+  async deleteById(templateId: string): Promise<boolean> {
+    const scopes: Array<'workspace' | 'global'> = ['workspace', 'global'];
+    for (const scope of scopes) {
+      const templateDir = this.getTemplateDir(scope);
+      if (!templateDir) continue;
+      try {
+        const files = await vscode.workspace.fs.readDirectory(templateDir);
+        for (const [file, type] of files) {
+          if (type !== vscode.FileType.File || !file.endsWith(TEMPLATE_EXT)) continue;
+          const fileUri = vscode.Uri.joinPath(templateDir, file);
+          try {
+            const raw = await vscode.workspace.fs.readFile(fileUri);
+            const content = new TextDecoder('utf-8').decode(raw);
+            const template = JSON.parse(content) as WorkflowTemplate;
+            if (template.template_id === templateId) {
+              await vscode.workspace.fs.delete(fileUri);
+              return true;
+            }
+          } catch {
+            // Skip malformed files
+          }
+        }
+      } catch {
+        // Directory doesn't exist
+      }
+    }
+    return false;
+  }
+
   /**
    * Import a template from a JSON string and save it to the workspace template directory.
    */

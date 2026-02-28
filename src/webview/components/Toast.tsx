@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 
 export interface ToastItem {
   id: string;
@@ -23,18 +23,27 @@ export function ToastContainer({ toasts, onRemove }: ToastContainerProps) {
 }
 
 function ToastEntry({ toast, onRemove }: { toast: ToastItem; onRemove: (id: string) => void }) {
+  const [leaving, setLeaving] = useState(false);
+
+  // Begin exit animation 200ms before removal
   useEffect(() => {
-    const timer = setTimeout(() => onRemove(toast.id), 3000);
-    return () => clearTimeout(timer);
+    const leaveTimer = setTimeout(() => setLeaving(true), 2800);
+    const removeTimer = setTimeout(() => onRemove(toast.id), 3200);
+    return () => { clearTimeout(leaveTimer); clearTimeout(removeTimer); };
   }, [toast.id, onRemove]);
+
+  const handleDismiss = () => {
+    setLeaving(true);
+    setTimeout(() => onRemove(toast.id), 200);
+  };
 
   const icon = toast.type === 'success' ? '✓' : toast.type === 'error' ? '✕' : 'ℹ';
 
   return (
-    <div className={`toast toast--${toast.type}`} role="status">
+    <div className={`toast toast--${toast.type}${leaving ? ' toast--leaving' : ''}`} role="status">
       <span className="toast__icon" aria-hidden="true">{icon}</span>
       <span className="toast__message">{toast.message}</span>
-      <button className="toast__close" onClick={() => onRemove(toast.id)} aria-label="Dismiss notification">✕</button>
+      <button className="toast__close" onClick={handleDismiss} aria-label="Dismiss notification">✕</button>
     </div>
   );
 }

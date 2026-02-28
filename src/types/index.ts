@@ -302,6 +302,7 @@ export type WebviewMessageType =
   | 'template:open_selector'
   | 'template:export'
   | 'template:import'
+  | 'template:delete'
   | 'config:update'
   | 'source:get'
   | 'context:get'

@@ -132,6 +132,14 @@ export function TemplateSelector({ templates, onSelect, onClose }: TemplateSelec
                 >
                   ↓
                 </button>
+                <button
+                  className="btn btn--ghost btn--sm btn--danger-hover"
+                  onClick={() => postMessage({ type: 'template:delete', payload: { template_id: tpl.template_id, name: tpl.name } })}
+                  title={t('template.delete')}
+                  aria-label={`${t('template.delete')} ${tpl.name}`}
+                >
+                  🗑
+                </button>
                 <button className="btn btn--primary btn--sm template-item__load" onClick={() => onSelect(tpl)}>
                   {t('template.load')}
                 </button>
