@@ -85,10 +85,11 @@ ${handoverSection}${loopNote}
           sections.push(`## ${mapping.label}:\n<project_structure>\n${projectCtx.fileTree}\n</project_structure>`);
         }
       } else {
-        // Find the output_key for this agent's task
+        // Find the output_key for this agent's task — must match BOTH from_step and from_agent_id
+        // to correctly handle workflows where the same agent appears in multiple steps.
         const agentTask = config.workflow
-          .flatMap((step) => step.tasks)
-          .find((t) => t.agent_id === mapping.from_agent_id);
+          .find((s) => s.step === mapping.from_step)
+          ?.tasks.find((t) => t.agent_id === mapping.from_agent_id);
 
         if (agentTask) {
           const output = this.stateManager.getOutput(agentTask.output_key);
