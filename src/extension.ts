@@ -58,6 +58,12 @@ const SECRET_KEYS = [
   'aiAgentOrchestrator.googleKey',
 ];
 
+const SECRET_KEY_MAP: Record<string, string> = {
+  openai: 'aiAgentOrchestrator.openaiKey',
+  anthropic: 'aiAgentOrchestrator.anthropicKey',
+  google: 'aiAgentOrchestrator.googleKey',
+};
+
 interface AvailableModels {
   openai: string[];
   anthropic: string[];
@@ -551,12 +557,7 @@ async function handleWebviewMessage(
 
     case 'settings:save': {
       const p = message.payload as { provider: 'openai' | 'anthropic' | 'google'; key: string };
-      const secretKeyMap: Record<string, string> = {
-        openai: 'aiAgentOrchestrator.openaiKey',
-        anthropic: 'aiAgentOrchestrator.anthropicKey',
-        google: 'aiAgentOrchestrator.googleKey',
-      };
-      const secretKey = secretKeyMap[p.provider];
+      const secretKey = SECRET_KEY_MAP[p.provider];
       if (secretKey && p.key) {
         try {
           await safeSecretsStore(context, secretKey, p.key);
@@ -574,12 +575,7 @@ async function handleWebviewMessage(
 
     case 'settings:clear': {
       const p = message.payload as { provider: 'openai' | 'anthropic' | 'google' };
-      const secretKeyMap: Record<string, string> = {
-        openai: 'aiAgentOrchestrator.openaiKey',
-        anthropic: 'aiAgentOrchestrator.anthropicKey',
-        google: 'aiAgentOrchestrator.googleKey',
-      };
-      const secretKey = secretKeyMap[p.provider];
+      const secretKey = SECRET_KEY_MAP[p.provider];
       if (secretKey) {
         try { await context.secrets.delete(secretKey); } catch { /* ignore */ }
         // Also clear fallback
@@ -625,6 +621,8 @@ async function handleWebviewMessage(
       await vscode.workspace
         .getConfiguration('aiAgentOrchestrator')
         .update('defaultModel', p.model, vscode.ConfigurationTarget.Global);
+      const updated = await buildSettingsCurrent(context);
+      postMessage({ type: 'settings:current', payload: updated });
       break;
     }
 

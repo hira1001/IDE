@@ -4,16 +4,12 @@ import { Agent, Task, TaskState, OutputFormat, LLMModel, WorkflowConfig, InputSo
 import { useVSCode } from '../hooks/useVSCode.js';
 import { useAutoResize } from '../hooks/useAutoResize.js';
 import { ToolCallLog, ToolEvent } from './ToolCallLog.js';
-import { AvailableModels } from '../hooks/useWorkflowState.js';
+import { AvailableModels, EMPTY_AVAILABLE_MODELS } from '../hooks/useWorkflowState.js';
 
 const ALL_AGENT_TOOLS = [
   'read_file', 'write_file', 'edit_file', 'list_files',
   'search_code', 'get_diagnostics', 'get_definition', 'find_references', 'run_terminal',
 ] as const;
-
-const EMPTY_AVAILABLE_MODELS: AvailableModels = {
-  openai: [], anthropic: [], google: [], ollama: [], vscodeLM: [],
-};
 const OUTPUT_FORMATS: OutputFormat[] = ['Markdown', 'Mermaid', 'JSON', 'PlainText', 'Code'];
 
 const STATUS_FALLBACK: Record<string, string> = {
@@ -138,11 +134,6 @@ export function AgentCard({
     if (m.vscodeLM.length)  groups.push({ label: 'VS Code LM',   models: m.vscodeLM });
     return groups;
   }, [effectiveAvailableModels]);
-
-  const allAvailableModelsList = useMemo(
-    () => groupedModels.flatMap((g) => g.models),
-    [groupedModels]
-  );
 
   // Detect duplicate output_key within the workflow
   const isDuplicateOutputKey = useMemo(() => {
@@ -547,12 +538,12 @@ export function AgentCard({
                     title="Back to list"
                   >← List</button>
                 </div>
-              ) : allAvailableModelsList.length > 0 ? (
+              ) : groupedModels.length > 0 ? (
                 <div style={{ display: 'flex', gap: 4 }}>
                   <select
                     className="field-select"
                     style={{ flex: 1 }}
-                    value={allAvailableModelsList.includes(agent.model) ? agent.model : '__custom__'}
+                    value={groupedModels.some((g) => g.models.includes(agent.model)) ? agent.model : '__custom__'}
                     onChange={(e) => {
                       if (e.target.value === '__custom__') {
                         setUseCustomModel(true);

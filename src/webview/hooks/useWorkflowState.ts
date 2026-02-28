@@ -36,7 +36,7 @@ interface WorkflowState {
   toolEvents: Record<string, Array<{ event_type: string; tool_name?: string; content?: string; iteration?: number }>>;
 }
 
-const EMPTY_AVAILABLE_MODELS: AvailableModels = {
+export const EMPTY_AVAILABLE_MODELS: AvailableModels = {
   openai: [], anthropic: [], google: [], ollama: [], vscodeLM: [],
 };
 

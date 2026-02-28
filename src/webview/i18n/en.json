@@ -141,6 +141,7 @@
     "stop": "Stop execution",
     "undo": "Undo",
     "redo": "Redo",
+    "openSettings": "Open Settings",
     "close": "Close"
   }
 }

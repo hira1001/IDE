@@ -1,13 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useVSCode } from '../hooks/useVSCode.js';
-
-interface AvailableModels {
-  openai: string[];
-  anthropic: string[];
-  google: string[];
-  ollama: string[];
-  vscodeLM: string[];
-}
+import { AvailableModels } from '../hooks/useWorkflowState.js';
 
 interface SettingsCurrent {
   openai: 'set' | 'unset';
@@ -42,13 +35,17 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
   const [settings, setSettings] = useState<SettingsCurrent | null>(null);
   const [inputs, setInputs] = useState<Record<ProviderKey, string>>({ openai: '', anthropic: '', google: '' });
-  const [dirty, setDirty] = useState<Record<ProviderKey, boolean>>({ openai: false, anthropic: false, google: false });
   const [feedback, setFeedback] = useState<Record<ProviderKey, 'ok' | 'error' | null>>({ openai: null, anthropic: null, google: null });
   const [ollamaInput, setOllamaInput] = useState('');
-  const [ollamaDirty, setOllamaDirty] = useState(false);
   const [ollamaStatus, setOllamaStatus] = useState<OllamaResult | 'testing' | null>(null);
   const [defaultModelInput, setDefaultModelInput] = useState('');
-  const [defaultModelDirty, setDefaultModelDirty] = useState(false);
+  const feedbackTimersRef = useRef<Partial<Record<ProviderKey, ReturnType<typeof setTimeout>>>>({});
+
+  // Clear all pending feedback timers on unmount
+  useEffect(() => {
+    const timers = feedbackTimersRef.current;
+    return () => { Object.values(timers).forEach(clearTimeout); };
+  }, []);
 
   // Listen for messages from extension
   useEffect(() => {
@@ -60,8 +57,6 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
         setSettings(s);
         setOllamaInput(s.ollamaEndpoint);
         setDefaultModelInput(s.defaultModel);
-        setOllamaDirty(false);
-        setDefaultModelDirty(false);
       }
 
       if (msg.type === 'settings:saved') {
@@ -69,9 +64,12 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
         setFeedback((f) => ({ ...f, [p.provider]: p.success ? 'ok' : 'error' }));
         if (p.success) {
           setInputs((i) => ({ ...i, [p.provider]: '' }));
-          setDirty((d) => ({ ...d, [p.provider]: false }));
-          // Clear feedback after 1.5s
-          setTimeout(() => setFeedback((f) => ({ ...f, [p.provider]: null })), 1500);
+          const existing = feedbackTimersRef.current[p.provider];
+          if (existing) clearTimeout(existing);
+          feedbackTimersRef.current[p.provider] = setTimeout(() => {
+            setFeedback((f) => ({ ...f, [p.provider]: null }));
+            delete feedbackTimersRef.current[p.provider];
+          }, 1500);
         }
       }
 
@@ -113,12 +111,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
   const handleSaveOllama = useCallback(() => {
     postMessage({ type: 'settings:save_ollama', payload: { endpoint: ollamaInput } });
-    setOllamaDirty(false);
   }, [ollamaInput, postMessage]);
 
   const handleSaveDefaultModel = useCallback(() => {
     postMessage({ type: 'settings:save_default_model', payload: { model: defaultModelInput } });
-    setDefaultModelDirty(false);
   }, [defaultModelInput, postMessage]);
 
   const allAvailableModels = settings
@@ -170,9 +166,9 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
             <p className="settings-section__desc">Keys are stored securely in VS Code SecretStorage (OS keychain).</p>
 
             {PROVIDER_META.map(({ id, label, placeholder }) => {
-              const isSet = settings?.[ id] === 'set';
+              const isSet = settings?.[id] === 'set';
               const inputVal = inputs[id];
-              const isDirty = dirty[id];
+              const isDirty = inputVal.trim().length > 0;
               const fb = feedback[id];
 
               return (
@@ -193,12 +189,11 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                       data-1p-ignore
                       onChange={(e) => {
                         setInputs((i) => ({ ...i, [id]: e.target.value }));
-                        setDirty((d) => ({ ...d, [id]: e.target.value.length > 0 }));
                       }}
                     />
                     <button
                       className="btn btn--primary btn--sm"
-                      disabled={!isDirty || inputVal.trim().length === 0}
+                      disabled={!isDirty}
                       onClick={() => handleSaveKey(id)}
                     >
                       {isSet ? 'Update' : 'Save'}
@@ -228,10 +223,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                 <select
                   className="field-select"
                   value={allAvailableModels.includes(defaultModelInput) ? defaultModelInput : ''}
-                  onChange={(e) => {
-                    setDefaultModelInput(e.target.value);
-                    setDefaultModelDirty(e.target.value !== settings?.defaultModel);
-                  }}
+                  onChange={(e) => setDefaultModelInput(e.target.value)}
                   style={{ flex: 1 }}
                 >
                   {groupedModels.map((g) => (
@@ -247,17 +239,14 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                   className="field-input"
                   style={{ flex: 1 }}
                   value={defaultModelInput}
-                  onChange={(e) => {
-                    setDefaultModelInput(e.target.value);
-                    setDefaultModelDirty(e.target.value !== settings?.defaultModel);
-                  }}
+                  onChange={(e) => setDefaultModelInput(e.target.value)}
                   placeholder="Configure an API key first"
                   disabled={allAvailableModels.length === 0}
                 />
               )}
               <button
                 className="btn btn--primary btn--sm"
-                disabled={!defaultModelDirty}
+                disabled={defaultModelInput === (settings?.defaultModel ?? '')}
                 onClick={handleSaveDefaultModel}
               >
                 Apply
@@ -286,7 +275,6 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                 autoComplete="off"
                 onChange={(e) => {
                   setOllamaInput(e.target.value);
-                  setOllamaDirty(e.target.value !== settings?.ollamaEndpoint);
                   setOllamaStatus(null);
                 }}
                 placeholder="http://localhost:11434"
@@ -298,7 +286,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
               >
                 {ollamaStatus === 'testing' ? 'Testing…' : 'Test'}
               </button>
-              {ollamaDirty && (
+              {ollamaInput !== (settings?.ollamaEndpoint ?? '') && (
                 <button className="btn btn--primary btn--sm" onClick={handleSaveOllama}>Save</button>
               )}
             </div>

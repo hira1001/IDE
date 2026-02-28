@@ -686,7 +686,7 @@ export function App() {
               </div>
               <div className="shortcuts-modal__row">
                 <div className="shortcuts-modal__keys"><kbd>Ctrl</kbd>+<kbd>,</kbd></div>
-                <span>Open Settings</span>
+                <span>{t('shortcuts.openSettings')}</span>
               </div>
               <div className="shortcuts-modal__row">
                 <div className="shortcuts-modal__keys"><kbd>Esc</kbd></div>
