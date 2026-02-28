@@ -78,8 +78,12 @@
       "completed": "Completed",
       "error": "Error",
       "skipped": "Skipped",
-      "aborted": "Aborted"
-    }
+      "aborted": "Aborted",
+      "tool_calling": "Using Tools"
+    },
+    "agentMode": "Agent Mode (ReAct loop with tools)",
+    "autoApplyEdits": "Auto-apply file edits",
+    "maxToolIterations": "Max tool iterations"
   },
   "dryrun": {
     "title": "Dry Run Preview",

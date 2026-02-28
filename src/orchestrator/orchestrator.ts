@@ -7,6 +7,8 @@ import {
   ProjectContext,
   SerializedExecutionState,
   HandoverNote,
+  AgentLoopEvent,
+  LLMGateway,
 } from '../types/index.js';
 import { StateManager } from './stateManager.js';
 import { PromptBuilder } from './promptBuilder.js';
@@ -15,6 +17,11 @@ import { ConditionEvaluator } from './conditionEvaluator.js';
 import { AbortManager } from './abortManager.js';
 import { getGateway, ApiKeys } from '../llm/gateway.js';
 import { getCostForTokens } from '../llm/pricing.js';
+import { getAllowedTools } from '../tools/toolDefinitions.js';
+import { FileChangeTracker } from '../tools/fileChangeTracker.js';
+import { ToolExecutor, VscodeApiForTools } from '../tools/toolExecutor.js';
+import { AgentLoopEngine } from './reactLoop.js';
+import { VscodeLMApi } from '../llm/vscodeLMAdapter.js';
 
 export type StatusCallback = (state: SerializedExecutionState) => void;
 export type PauseCallback = (stepIndex: number, outputs: Record<string, string>) => Promise<void>;
@@ -28,6 +35,16 @@ export interface OrchestratorOptions {
   onStreamChunk?: StreamChunkCallback;
   /** Timeout for each LLM call in ms (default: 60000) */
   timeout?: number;
+  /** Workspace root for file tools used by agentic tasks (defaults to process.cwd()). */
+  workspaceRoot?: string;
+  /** VS Code API injection for IDE tools (diagnostics, definition, references). */
+  vscode?: VscodeApiForTools;
+  /** VS Code Language Model API for routing vscode: prefixed models. */
+  vscodeLM?: VscodeLMApi;
+  /** Called for each ReAct loop tool_call / tool_result event. */
+  onAgentLoopEvent?: (event: AgentLoopEvent) => void;
+  /** Called to confirm terminal commands when autonomy mode is 'confirm'. */
+  onConfirmTerminal?: (command: string) => Promise<boolean>;
 }
 
 /**
@@ -43,6 +60,8 @@ export class Orchestrator {
   private readonly timeout: number;
   /** Tracks all in-flight LLM gateways so abort() can cancel active fetch calls. */
   private readonly activeGateways: Map<string, ReturnType<typeof getGateway>> = new Map();
+  /** Tracks AbortControllers for active ReAct loops so abort() can cancel them. */
+  private readonly activeLoopAbortControllers: Map<string, AbortController> = new Map();
 
   constructor(private readonly options: OrchestratorOptions) {
     this.stateManager = new StateManager();
@@ -97,6 +116,10 @@ export class Orchestrator {
     // Abort all in-flight LLM fetch calls via their gateway's internal AbortController
     for (const gateway of this.activeGateways.values()) {
       gateway.abort();
+    }
+    // Abort active ReAct loops
+    for (const controller of this.activeLoopAbortControllers.values()) {
+      controller.abort();
     }
     this.abortManager.abortAll();
     this.stateManager.setStatus('aborted');
@@ -324,10 +347,16 @@ export class Orchestrator {
     const userPrompt = promptBuilder.buildUserPrompt(task, config);
 
     try {
-      const gateway = getGateway(agent.model, this.options.apiKeys);
+      const gateway = getGateway(agent.model, this.options.apiKeys, this.options.vscodeLM);
       // Register so abort() can cancel this in-flight request
       this.activeGateways.set(taskId, gateway);
       const start = Date.now();
+
+      // Agentic (ReAct loop) path
+      if (task.use_tools) {
+        await this.runAgenticTask(task, agent, stepNumber, systemPrompt, userPrompt, gateway, start);
+        return;
+      }
 
       const onChunk = this.options.onStreamChunk
         ? (chunk: string) => this.options.onStreamChunk!(taskId, chunk)
@@ -413,6 +442,76 @@ export class Orchestrator {
     }
 
     this.emit();
+  }
+
+  /**
+   * Runs a task using the ReAct (Reason → Act → Observe) loop with tool calling.
+   * Called by runTask() when task.use_tools is true.
+   */
+  private async runAgenticTask(
+    task: Task,
+    agent: Agent,
+    stepNumber: number,
+    systemPrompt: string,
+    userPrompt: string,
+    gateway: LLMGateway,
+    start: number
+  ): Promise<void> {
+    const taskId = task.task_id;
+    const tools = getAllowedTools(task.allowed_tools);
+    const tracker = new FileChangeTracker();
+
+    const abortController = new AbortController();
+    this.activeLoopAbortControllers.set(taskId, abortController);
+
+    const executor = new ToolExecutor({
+      workspaceRoot: this.options.workspaceRoot ?? process.cwd(),
+      tracker,
+      autonomyMode: 'auto',
+      confirmTerminal: this.options.onConfirmTerminal ?? (() => Promise.resolve(false)),
+      vscode: this.options.vscode,
+    });
+
+    const loop = new AgentLoopEngine(gateway, executor, tracker, taskId, {
+      maxIterations: task.max_tool_iterations ?? 10,
+      autoApplyEdits: task.auto_apply_edits ?? true,
+      abortSignal: abortController.signal,
+      onEvent: (event) => {
+        this.options.onAgentLoopEvent?.(event);
+        if (event.type === 'tool_call' || event.type === 'tool_result') {
+          this.stateManager.log(stepNumber, taskId, event.type, event.toolName ?? '');
+          this.emit();
+        }
+      },
+    });
+
+    this.stateManager.setTaskStatus(taskId, 'tool_calling');
+    this.emit();
+
+    try {
+      const result = await loop.run(systemPrompt, userPrompt, agent.model, tools);
+
+      this.stateManager.setOutput(task.output_key, result.finalText);
+
+      const cost = getCostForTokens(agent.model, result.totalInputTokens, result.totalOutputTokens);
+      this.stateManager.addTokenUsage(result.totalInputTokens, result.totalOutputTokens, cost);
+
+      const duration = Date.now() - start;
+      this.stateManager.updateTaskState(taskId, {
+        status: 'completed',
+        input_tokens: result.totalInputTokens,
+        output_tokens: result.totalOutputTokens,
+        duration_ms: duration,
+      });
+      this.stateManager.log(
+        stepNumber,
+        taskId,
+        'complete',
+        `${result.totalInputTokens}in+${result.totalOutputTokens}out tokens, ${result.iterations} iterations, ${result.filesChanged.length} files changed`
+      );
+    } finally {
+      this.activeLoopAbortControllers.delete(taskId);
+    }
   }
 
   private async handlePause(step: WorkflowStep, _config: WorkflowConfig): Promise<void> {

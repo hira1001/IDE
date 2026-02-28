@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Agent, Task, TaskState, OutputFormat, LLMModel, WorkflowConfig, InputSource } from '../../types/index.js';
 import { useVSCode } from '../hooks/useVSCode.js';
 import { useAutoResize } from '../hooks/useAutoResize.js';
+import { ToolCallLog, ToolEvent } from './ToolCallLog.js';
 
 const LLM_MODEL_GROUPS: { label: string; models: LLMModel[] }[] = [
   {
@@ -28,10 +29,12 @@ const STATUS_FALLBACK: Record<string, string> = {
   idle: 'Idle', running: 'Running', validating: 'Validating',
   retrying: 'Retrying', paused: 'Paused', completed: 'Done',
   error: 'Error', skipped: 'Skipped', aborted: 'Aborted',
+  tool_calling: 'Using Tools',
 };
 const STATUS_ICON: Record<string, string> = {
   validating: '🔍', retrying: '🔄', paused: '⏸',
   completed: '✅', error: '⚠️', skipped: '⏭', aborted: '⏹',
+  tool_calling: '🔧',
 };
 
 interface AgentCardProps {
@@ -41,6 +44,8 @@ interface AgentCardProps {
   output?: string;
   /** Live streaming text chunk accumulation (shown while status === 'running'). */
   streamingOutput?: string;
+  /** Tool call events for agentic tasks (shown while status === 'tool_calling'). */
+  toolEvents?: ToolEvent[];
   config?: WorkflowConfig;
   onUpdateAgent: (agent: Agent) => void;
   onUpdateTask: (task: Task) => void;
@@ -58,7 +63,7 @@ interface AgentCardProps {
 }
 
 export function AgentCard({
-  agent, task, taskState, output, streamingOutput, config,
+  agent, task, taskState, output, streamingOutput, toolEvents, config,
   onUpdateAgent, onUpdateTask, onRetry, onDelete,
   taskIndex, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd,
   onToast,
@@ -89,7 +94,7 @@ export function AgentCard({
   const draftBriefRef = useAutoResize(draftBrief, 3);
 
   const status = taskState?.status ?? 'idle';
-  const isActive = status === 'running' || status === 'validating' || status === 'retrying';
+  const isActive = status === 'running' || status === 'validating' || status === 'retrying' || status === 'tool_calling';
 
   // Elapsed timer during active execution
   useEffect(() => {
@@ -530,10 +535,45 @@ export function AgentCard({
                 onChange={(e) => onUpdateTask({ ...task, enable_handover_note: e.target.checked })} />
               {t('card.handoverNote')}
             </label>
+
+            {/* Agent Mode toggle */}
+            <label className="field-checkbox">
+              <input type="checkbox" checked={task.use_tools ?? false}
+                onChange={(e) => onUpdateTask({ ...task, use_tools: e.target.checked })} />
+              {t('card.agentMode', 'Agent Mode (ReAct loop with tools)')}
+            </label>
+
+            {/* Agent Mode options — shown only when use_tools is enabled */}
+            {task.use_tools && (
+              <div style={{ paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <label className="field-checkbox">
+                  <input type="checkbox" checked={task.auto_apply_edits ?? true}
+                    onChange={(e) => onUpdateTask({ ...task, auto_apply_edits: e.target.checked })} />
+                  {t('card.autoApplyEdits', 'Auto-apply file edits')}
+                </label>
+                <div className="field-group" style={{ marginBottom: 0 }}>
+                  <label className="field-label">{t('card.maxToolIterations', 'Max tool iterations')}</label>
+                  <input
+                    type="number"
+                    className="field-input"
+                    style={{ width: 80 }}
+                    min={1}
+                    max={50}
+                    value={task.max_tool_iterations ?? 10}
+                    onChange={(e) => onUpdateTask({ ...task, max_tool_iterations: Number(e.target.value) })}
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
+          {/* ── Tool call log (while tool_calling) ── */}
+          {status === 'tool_calling' && toolEvents && toolEvents.length > 0 && (
+            <ToolCallLog events={toolEvents} />
+          )}
+
           {/* ── Live streaming output (while running) ── */}
-          {isActive && streamingOutput && (
+          {isActive && streamingOutput && status !== 'tool_calling' && (
             <div className="agent-card__streaming-section">
               <div className="agent-card__output-header">
                 <span className="agent-card__output-title agent-card__output-title--streaming">

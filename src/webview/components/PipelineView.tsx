@@ -8,6 +8,7 @@ interface PipelineViewProps {
   taskStates: Record<string, TaskState>;
   outputStore: Record<string, string>;
   streamingChunks?: Record<string, string>;
+  toolEvents?: Record<string, Array<{ event_type: string; tool_name?: string; content?: string; iteration?: number }>>;
   onChange: (config: WorkflowConfig) => void;
   onRetryTask: (taskId: string) => void;
   onToast?: (message: string, type: 'success' | 'error' | 'info') => void;
@@ -18,6 +19,7 @@ export function PipelineView({
   taskStates,
   outputStore,
   streamingChunks,
+  toolEvents,
   onChange,
   onRetryTask,
   onToast,
@@ -76,6 +78,7 @@ export function PipelineView({
             taskStates={taskStates}
             outputStore={outputStore}
             streamingChunks={streamingChunks}
+            toolEvents={toolEvents}
             onUpdateStep={(updatedStep) => updateStep(idx, updatedStep)}
             onDeleteStep={() => deleteStep(idx)}
             onRetryTask={onRetryTask}

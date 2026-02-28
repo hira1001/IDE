@@ -3,6 +3,7 @@ import { OpenAIAdapter } from './openaiAdapter.js';
 import { AnthropicAdapter } from './anthropicAdapter.js';
 import { GoogleAIAdapter } from './googleAdapter.js';
 import { OllamaAdapter } from './ollamaAdapter.js';
+import { VscodeLMAdapter, VscodeLMApi } from './vscodeLMAdapter.js';
 
 export type ApiKeys = {
   openai?: string;
@@ -12,7 +13,26 @@ export type ApiKeys = {
   ollama?: string;
 };
 
-export function getGateway(model: LLMModel, apiKeys: ApiKeys): LLMGateway {
+/**
+ * Return the appropriate LLM gateway for the given model.
+ *
+ * Model prefixes:
+ *   gpt-*      → OpenAI
+ *   claude-*   → Anthropic
+ *   gemini-*   → Google AI
+ *   ollama:*   → Ollama (local)
+ *   vscode:*   → VS Code Language Model API (Cursor, Copilot, etc.)
+ */
+export function getGateway(
+  model: LLMModel,
+  apiKeys: ApiKeys,
+  vscodeLM?: VscodeLMApi
+): LLMGateway {
+  if (model.startsWith('vscode:')) {
+    if (!vscodeLM) throw new Error('VS Code LM API is not available in this context.');
+    const modelId = model.slice('vscode:'.length);
+    return new VscodeLMAdapter(modelId, vscodeLM);
+  }
   if (model.startsWith('ollama:')) {
     return new OllamaAdapter(apiKeys.ollama ?? 'http://localhost:11434');
   }
@@ -31,7 +51,8 @@ export function getGateway(model: LLMModel, apiKeys: ApiKeys): LLMGateway {
   throw new Error(`Unknown model: ${model}`);
 }
 
-export function getProviderFromModel(model: LLMModel): 'openai' | 'anthropic' | 'google' | 'ollama' {
+export function getProviderFromModel(model: LLMModel): 'openai' | 'anthropic' | 'google' | 'ollama' | 'vscode' {
+  if (model.startsWith('vscode:')) return 'vscode';
   if (model.startsWith('ollama:')) return 'ollama';
   if (model.startsWith('gpt-')) return 'openai';
   if (model.startsWith('claude-')) return 'anthropic';
@@ -39,8 +60,8 @@ export function getProviderFromModel(model: LLMModel): 'openai' | 'anthropic' | 
   throw new Error(`Unknown model provider for: ${model}`);
 }
 
-export function getRequiredProviders(models: LLMModel[]): Set<'openai' | 'anthropic' | 'google' | 'ollama'> {
-  const providers = new Set<'openai' | 'anthropic' | 'google' | 'ollama'>();
+export function getRequiredProviders(models: LLMModel[]): Set<'openai' | 'anthropic' | 'google' | 'ollama' | 'vscode'> {
+  const providers = new Set<'openai' | 'anthropic' | 'google' | 'ollama' | 'vscode'>();
   for (const model of models) {
     providers.add(getProviderFromModel(model));
   }

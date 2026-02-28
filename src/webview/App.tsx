@@ -121,6 +121,7 @@ export function App() {
     isGenerating,
     generationError,
     streamingChunks,
+    toolEvents,
     generateWorkflow,
     executeWorkflow,
     executeFromStep,
@@ -464,6 +465,7 @@ export function App() {
           taskStates={taskStates}
           outputStore={outputStore}
           streamingChunks={streamingChunks}
+          toolEvents={toolEvents}
           onChange={setConfig}
           onRetryTask={(taskId) => retryTask(taskId, config)}
           onToast={addToast}

@@ -38,6 +38,14 @@ export interface Task {
   output_key: string;
   input_mapping: InputSource[];
   enable_handover_note: boolean;
+  /** Agentic mode: agent uses ReAct loop with file/IDE tools. */
+  use_tools?: boolean;
+  /** Which tool names are allowed (undefined = all tools). */
+  allowed_tools?: string[];
+  /** Apply file edits immediately (true) or show diff for approval (false). Default: true. */
+  auto_apply_edits?: boolean;
+  /** Maximum ReAct iterations before stopping. Default: 10. */
+  max_tool_iterations?: number;
 }
 
 // ─── Workflow Step ─────────────────────────────────────────────────────────────
@@ -155,6 +163,7 @@ export type TaskStatus =
   | 'running'
   | 'validating'
   | 'retrying'
+  | 'tool_calling'
   | 'paused'
   | 'completed'
   | 'error'
@@ -185,7 +194,9 @@ export type ExecutionLogEvent =
   | 'pause'
   | 'resume'
   | 'abort'
-  | 'manual_edit';
+  | 'manual_edit'
+  | 'tool_call'
+  | 'tool_result';
 
 export interface ExecutionLogEntry {
   timestamp: string;
@@ -223,6 +234,44 @@ export interface WorkflowTemplate {
   config: WorkflowConfig;
 }
 
+// ─── Tool Calling (Agentic / ReAct mode) ─────────────────────────────────────
+
+/** JSON Schema definition for a single tool (function). */
+export interface ToolDefinition {
+  name: string;
+  description: string;
+  parameters: {
+    type: 'object';
+    properties: Record<string, { type: string; description: string; [k: string]: unknown }>;
+    required?: string[];
+  };
+}
+
+/** A tool invocation returned by the LLM. */
+export interface ToolCall {
+  /** Provider-assigned call ID (used when returning results). */
+  id: string;
+  name: string;
+  arguments: Record<string, unknown>;
+}
+
+/** A single message in a multi-turn ReAct conversation. */
+export type ConversationMessage =
+  | { role: 'system'; content: string }
+  | { role: 'user'; content: string }
+  | { role: 'assistant'; content: string; tool_calls?: ToolCall[] }
+  | { role: 'tool'; tool_call_id: string; content: string };
+
+/** Fired by AgentLoopEngine to report progress to the orchestrator. */
+export interface AgentLoopEvent {
+  type: 'tool_call' | 'tool_result' | 'text_chunk' | 'iteration';
+  taskId: string;
+  /** For tool_call/tool_result: tool name and result snippet. */
+  toolName?: string;
+  content?: string;
+  iteration?: number;
+}
+
 // ─── LLM Gateway ──────────────────────────────────────────────────────────────
 
 export interface LLMRequest {
@@ -233,6 +282,10 @@ export interface LLMRequest {
   temperature?: number;
   /** Called with each text chunk as it streams in (optional). */
   onChunk?: (chunk: string) => void;
+  /** Tool definitions for function-calling mode (ReAct). When set, stream is disabled. */
+  tools?: ToolDefinition[];
+  /** Full multi-turn conversation history used by the ReAct loop. */
+  conversation?: ConversationMessage[];
 }
 
 export interface LLMResponse {
@@ -241,6 +294,8 @@ export interface LLMResponse {
   output_tokens: number;
   model: string;
   duration_ms: number;
+  /** Populated when the LLM requested tool calls instead of (or alongside) text. */
+  tool_calls?: ToolCall[];
 }
 
 export interface LLMGateway {
@@ -314,6 +369,10 @@ export type WebviewMessageType =
   | 'agent:draft_instruction'
   | 'agent:instruction_drafted'
   | 'task:stream_chunk'
+  | 'task:tool_event'
+  | 'tool:confirm'
+  | 'tool:confirm_result'
+  | 'lm:models_list'
   | 'webview:ready';
 
 export interface WebviewMessage {
@@ -409,4 +468,27 @@ export interface OpenTabPayload {
 // output:apply payload
 export interface ApplyOutputPayload {
   content: string;
+}
+
+// task:tool_event payload (Extension Host → Webview, real-time tool progress)
+export interface TaskToolEventPayload {
+  taskId: string;
+  event: AgentLoopEvent;
+}
+
+// tool:confirm payload (Extension Host → Webview — ask user to approve terminal command)
+export interface ToolConfirmPayload {
+  id: string;
+  command: string;
+}
+
+// tool:confirm_result payload (Webview → Extension Host)
+export interface ToolConfirmResultPayload {
+  id: string;
+  ok: boolean;
+}
+
+// lm:models_list payload (Extension Host → Webview — available VS Code LM models)
+export interface LMModelsListPayload {
+  models: string[]; // e.g. ['vscode:copilot-gpt-4', 'vscode:cursor-fast']
 }

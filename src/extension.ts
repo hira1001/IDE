@@ -20,7 +20,10 @@ import {
   OutputFormat,
   ProjectContextOptions,
   ApplyOutputPayload,
+  AgentLoopEvent,
 } from './types/index.js';
+import { VscodeApiForTools } from './tools/toolExecutor.js';
+import { VscodeLMApi, listVscodeLMModels } from './llm/vscodeLMAdapter.js';
 
 const EXTENSION_ID = 'ai-agent-orchestrator';
 let currentPanel: vscode.WebviewPanel | undefined;
@@ -385,6 +388,12 @@ async function handleWebviewMessage(
       break;
     }
 
+    case 'lm:models_list': {
+      const models = await listVscodeLMModels(vscode as unknown as VscodeLMApi);
+      postMessage({ type: 'lm:models_list', payload: { models } });
+      break;
+    }
+
     default:
       console.warn('[Extension] Unknown message type:', message.type);
   }
@@ -463,6 +472,9 @@ async function handleExecuteWorkflow(
   // Create orchestrator
   currentOrchestrator = new Orchestrator({
     apiKeys,
+    workspaceRoot,
+    vscode: vscode as unknown as VscodeApiForTools,
+    vscodeLM: vscode as unknown as VscodeLMApi,
     onStatusUpdate: (state: SerializedExecutionState) => {
       postMessage({ type: 'status:update', payload: { execution_state: state } });
 
@@ -498,6 +510,27 @@ async function handleExecuteWorkflow(
     },
     onStreamChunk: (taskId: string, chunk: string) => {
       postMessage({ type: 'task:stream_chunk', payload: { task_id: taskId, chunk } });
+    },
+    onAgentLoopEvent: (event: AgentLoopEvent) => {
+      postMessage({
+        type: 'task:tool_event',
+        payload: {
+          task_id: event.taskId,
+          event_type: event.type,
+          tool_name: event.toolName,
+          content: event.content,
+          iteration: event.iteration,
+        },
+      });
+    },
+    onConfirmTerminal: async (command: string) => {
+      const answer = await vscode.window.showWarningMessage(
+        `AI Agent: Allow terminal command?\n\`${command}\``,
+        { modal: true },
+        'Allow',
+        'Deny'
+      );
+      return answer === 'Allow';
     },
   });
 

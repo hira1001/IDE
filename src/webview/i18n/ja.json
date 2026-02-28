@@ -78,8 +78,12 @@
       "completed": "完了",
       "error": "エラー",
       "skipped": "スキップ",
-      "aborted": "停止済み"
-    }
+      "aborted": "停止済み",
+      "tool_calling": "ツール使用中"
+    },
+    "agentMode": "エージェントモード（ツール付きReActループ）",
+    "autoApplyEdits": "ファイル編集を自動適用",
+    "maxToolIterations": "最大ツール反復回数"
   },
   "dryrun": {
     "title": "ドライラン結果",

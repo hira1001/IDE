@@ -1,4 +1,4 @@
-import { LLMGateway, LLMRequest, LLMResponse } from '../types/index.js';
+import { LLMGateway, LLMRequest, LLMResponse, ToolDefinition, ConversationMessage, ToolCall } from '../types/index.js';
 import { estimateTokens } from './tokenCounter.js';
 
 export class OpenAIAdapter implements LLMGateway {
@@ -9,6 +9,11 @@ export class OpenAIAdapter implements LLMGateway {
   async chat(request: LLMRequest): Promise<LLMResponse> {
     this.abortController = new AbortController();
     const start = Date.now();
+
+    // ── Function-calling (ReAct) mode ──────────────────────────────────────
+    if (request.tools) {
+      return this._chatWithTools(request, start);
+    }
 
     const body = {
       model: request.model,
@@ -52,6 +57,71 @@ export class OpenAIAdapter implements LLMGateway {
       output_tokens: data.usage?.completion_tokens ?? 0,
       model: data.model ?? request.model,
       duration_ms: Date.now() - start,
+    };
+  }
+
+  private async _chatWithTools(request: LLMRequest, start: number): Promise<LLMResponse> {
+    const messages = request.conversation
+      ? conversationToOpenAI(request.conversation)
+      : [
+          { role: 'system', content: request.system_prompt },
+          { role: 'user', content: request.user_prompt },
+        ];
+
+    const body = {
+      model: request.model,
+      messages,
+      tools: request.tools!.map(toolToOpenAI),
+      tool_choice: 'auto',
+      max_tokens: request.max_tokens ?? 4096,
+      temperature: request.temperature ?? 0.7,
+    };
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify(body),
+      signal: this.abortController.signal,
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(`OpenAI API error ${response.status}: ${err}`);
+    }
+
+    const data = await response.json() as {
+      choices: Array<{
+        message: {
+          content?: string;
+          tool_calls?: Array<{
+            id: string;
+            type: string;
+            function: { name: string; arguments: string };
+          }>;
+        };
+        finish_reason: string;
+      }>;
+      usage: { prompt_tokens: number; completion_tokens: number };
+      model: string;
+    };
+
+    const msg = data.choices[0]?.message;
+    const toolCalls: ToolCall[] | undefined = msg?.tool_calls?.map((tc) => ({
+      id: tc.id,
+      name: tc.function.name,
+      arguments: parseJsonSafe(tc.function.arguments),
+    }));
+
+    return {
+      content: msg?.content ?? '',
+      input_tokens: data.usage?.prompt_tokens ?? 0,
+      output_tokens: data.usage?.completion_tokens ?? 0,
+      model: data.model ?? request.model,
+      duration_ms: Date.now() - start,
+      tool_calls: toolCalls?.length ? toolCalls : undefined,
     };
   }
 
@@ -113,5 +183,46 @@ export class OpenAIAdapter implements LLMGateway {
 
   estimateTokens(text: string): number {
     return estimateTokens(text);
+  }
+}
+
+// ─── format converters ────────────────────────────────────────────────────────
+
+function toolToOpenAI(tool: ToolDefinition) {
+  return {
+    type: 'function' as const,
+    function: {
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.parameters,
+    },
+  };
+}
+
+function conversationToOpenAI(messages: ConversationMessage[]) {
+  return messages.map((m) => {
+    if (m.role === 'tool') {
+      return { role: 'tool' as const, tool_call_id: m.tool_call_id, content: m.content };
+    }
+    if (m.role === 'assistant' && m.tool_calls) {
+      return {
+        role: 'assistant' as const,
+        content: m.content || null,
+        tool_calls: m.tool_calls.map((tc) => ({
+          id: tc.id,
+          type: 'function' as const,
+          function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
+        })),
+      };
+    }
+    return { role: m.role as 'system' | 'user' | 'assistant', content: m.content };
+  });
+}
+
+function parseJsonSafe(raw: string): Record<string, unknown> {
+  try {
+    return JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    return {};
   }
 }

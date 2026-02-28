@@ -22,6 +22,8 @@ interface WorkflowState {
   generationError: string | null;
   /** Live streaming text per task_id. Cleared when task reaches 'completed'. */
   streamingChunks: Record<string, string>;
+  /** Tool call events per task_id for agentic tasks. Cleared when task completes. */
+  toolEvents: Record<string, Array<{ event_type: string; tool_name?: string; content?: string; iteration?: number }>>;
 }
 
 const INITIAL_STATE: WorkflowState = {
@@ -34,6 +36,7 @@ const INITIAL_STATE: WorkflowState = {
   isGenerating: false,
   generationError: null,
   streamingChunks: {},
+  toolEvents: {},
 };
 
 export function useWorkflowState() {
@@ -77,14 +80,18 @@ export function useWorkflowState() {
         case 'status:update': {
           const p = message.payload as { execution_state: SerializedExecutionState };
           setState((s) => {
-            // Clear streaming chunks for any tasks that are now completed/error
+            // Clear streaming chunks and tool events for any tasks that are now completed/error
             const completed = Object.entries(p.execution_state.task_states)
               .filter(([, ts]) => ts.status === 'completed' || ts.status === 'error' || ts.status === 'aborted')
               .map(([id]) => id);
             if (completed.length > 0) {
               const updatedChunks = { ...s.streamingChunks };
-              for (const id of completed) delete updatedChunks[id];
-              return { ...s, executionState: p.execution_state, streamingChunks: updatedChunks };
+              const updatedToolEvents = { ...s.toolEvents };
+              for (const id of completed) {
+                delete updatedChunks[id];
+                delete updatedToolEvents[id];
+              }
+              return { ...s, executionState: p.execution_state, streamingChunks: updatedChunks, toolEvents: updatedToolEvents };
             }
             return { ...s, executionState: p.execution_state };
           });
@@ -98,6 +105,21 @@ export function useWorkflowState() {
             streamingChunks: {
               ...s.streamingChunks,
               [p.task_id]: (s.streamingChunks[p.task_id] ?? '') + p.chunk,
+            },
+          }));
+          break;
+        }
+
+        case 'task:tool_event': {
+          const p = message.payload as { task_id: string; event_type: string; tool_name?: string; content?: string; iteration?: number };
+          setState((s) => ({
+            ...s,
+            toolEvents: {
+              ...s.toolEvents,
+              [p.task_id]: [
+                ...(s.toolEvents[p.task_id] ?? []),
+                { event_type: p.event_type, tool_name: p.tool_name, content: p.content, iteration: p.iteration },
+              ],
             },
           }));
           break;
@@ -280,5 +302,6 @@ export function useWorkflowState() {
     canUndo: historySize.canUndo,
     canRedo: historySize.canRedo,
     streamingChunks: state.streamingChunks,
+    toolEvents: state.toolEvents,
   };
 }
