@@ -605,7 +605,9 @@ async function handleWebviewMessage(
           signal: AbortSignal.timeout(5000),
         });
         if (res.ok) {
-          postMessage({ type: 'settings:ollama_result', payload: { ok: true, latency: Date.now() - start } });
+          const data = await res.json() as { models?: { name: string }[] };
+          const models = (data.models ?? []).map((m) => m.name);
+          postMessage({ type: 'settings:ollama_result', payload: { ok: true, latency: Date.now() - start, models } });
         } else {
           postMessage({ type: 'settings:ollama_result', payload: { ok: false, error: `HTTP ${res.status}` } });
         }
@@ -949,11 +951,11 @@ async function autoUpdateDefaultModel(
   if (isAnthropic && anthropicKey) return;
   if (isGoogle && googleKey) return;
 
-  // Auto-set to first model of newly saved provider
+  // Auto-set to the flagship model of the newly saved provider
   const firstModelMap: Record<string, string> = {
-    openai:    OPENAI_MODELS[5],    // 'gpt-4o'
-    anthropic: ANTHROPIC_MODELS[1], // 'claude-sonnet-4-6'
-    google:    GOOGLE_MODELS[0],    // 'gemini-2.0-flash'
+    openai:    'gpt-4o',
+    anthropic: 'claude-sonnet-4-6',
+    google:    'gemini-2.0-flash',
   };
   const newDefault = firstModelMap[savedProvider];
   if (newDefault) {

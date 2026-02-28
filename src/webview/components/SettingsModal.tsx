@@ -16,6 +16,7 @@ interface OllamaResult {
   ok: boolean;
   latency?: number;
   error?: string;
+  models?: string[];
 }
 
 interface SettingsModalProps {
@@ -293,21 +294,26 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
             {ollamaStatus && ollamaStatus !== 'testing' && (
               <div className={`settings-feedback ${ollamaStatus.ok ? 'settings-feedback--ok' : 'settings-feedback--error'}`}>
                 {ollamaStatus.ok
-                  ? `✅ Connected (${ollamaStatus.latency}ms)${settings && settings.availableModels.ollama.length > 0 ? ` — ${settings.availableModels.ollama.length} model(s) found` : ''}`
+                  ? `✅ Connected (${ollamaStatus.latency}ms)${ollamaStatus.models && ollamaStatus.models.length > 0 ? ` — ${ollamaStatus.models.length} model(s) found` : ''}`
                   : `❌ ${ollamaStatus.error}`}
               </div>
             )}
-            {settings && settings.availableModels.ollama.length > 0 && (
-              <div className="settings-ollama-models">
-                <span style={{ fontSize: 11, color: 'var(--aao-muted)' }}>Available models: </span>
-                {settings.availableModels.ollama.slice(0, 5).map((m) => (
-                  <span key={m} className="settings-model-chip">{m}</span>
-                ))}
-                {settings.availableModels.ollama.length > 5 && (
-                  <span className="settings-model-chip">+{settings.availableModels.ollama.length - 5} more</span>
-                )}
-              </div>
-            )}
+            {(() => {
+              const displayModels = (ollamaStatus && ollamaStatus !== 'testing' && ollamaStatus.ok && ollamaStatus.models && ollamaStatus.models.length > 0)
+                ? ollamaStatus.models
+                : settings?.availableModels.ollama ?? [];
+              return displayModels.length > 0 ? (
+                <div className="settings-ollama-models">
+                  <span style={{ fontSize: 11, color: 'var(--aao-muted)' }}>Available models: </span>
+                  {displayModels.slice(0, 5).map((m) => (
+                    <span key={m} className="settings-model-chip">{m}</span>
+                  ))}
+                  {displayModels.length > 5 && (
+                    <span className="settings-model-chip">+{displayModels.length - 5} more</span>
+                  )}
+                </div>
+              ) : null;
+            })()}
           </section>
 
           {/* ── VS Code LM ── */}
