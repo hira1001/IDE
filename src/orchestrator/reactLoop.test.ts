@@ -125,6 +125,25 @@ describe('AgentLoopEngine', () => {
     expect(gateway.chat).toHaveBeenCalledTimes(3);
   });
 
+  it('falls back to last assistant preamble text when max iterations hit mid-tool-call', async () => {
+    // First response: assistant has thinking text + tool call
+    // Second and beyond: still requesting tool calls (no content preamble)
+    const gateway = makeGateway([
+      { content: 'I will read the files to understand the codebase.', tool_calls: [{ id: 'tc1', name: 'read_file', arguments: { path: 'a.ts' } }] },
+      { content: '', tool_calls: [{ id: 'tc2', name: 'read_file', arguments: { path: 'b.ts' } }] },
+    ]);
+    const executor = makeExecutor();
+    const loop = new AgentLoopEngine(gateway, executor, tracker, 'task-1', {
+      maxIterations: 3,
+    });
+
+    const result = await loop.run('sys', 'analyze files', 'mock', ALL_TOOLS);
+
+    expect(result.iterations).toBe(3);
+    // finalText should fall back to the last non-empty assistant content seen
+    expect(result.finalText).toBe('I will read the files to understand the codebase.');
+  });
+
   it('emits tool_call and tool_result events', async () => {
     const gateway = makeGateway([
       { content: '', tool_calls: [{ id: 'tc1', name: 'search_code', arguments: { pattern: 'TODO' } }] },

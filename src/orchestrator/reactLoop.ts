@@ -75,6 +75,7 @@ export class AgentLoopEngine {
     let totalInputTokens = 0;
     let totalOutputTokens = 0;
     let iteration = 0;
+    let lastAssistantText = '';
 
     while (iteration < this.maxIterations) {
       this.checkAbort();
@@ -96,11 +97,16 @@ export class AgentLoopEngine {
 
       if (!response.tool_calls || response.tool_calls.length === 0) {
         // LLM returned final text — loop complete
+        lastAssistantText = response.content ?? '';
         if (response.content) {
-          // Append assistant message for conversation completeness
           conversation.push({ role: 'assistant', content: response.content });
         }
         break;
+      }
+
+      // Track any assistant content included before tool calls (thinking/preamble)
+      if (response.content) {
+        lastAssistantText = response.content;
       }
 
       // LLM requested tool calls — execute each one
@@ -138,9 +144,11 @@ export class AgentLoopEngine {
       }
     }
 
-    // Extract the final text response
+    // Extract the final text response.
+    // If max iterations were hit while still in tool-call state (last msg is a 'tool' result),
+    // fall back to the last assistant text seen during the loop.
     const lastMsg = conversation[conversation.length - 1];
-    const finalText = lastMsg?.role === 'assistant' ? lastMsg.content : '';
+    const finalText = (lastMsg?.role === 'assistant' ? lastMsg.content : '') || lastAssistantText;
 
     // Commit file changes
     if (this.autoApplyEdits && this.tracker.hasChanges()) {
