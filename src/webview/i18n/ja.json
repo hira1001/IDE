@@ -31,7 +31,9 @@
     "cancelGeneration": "キャンセル",
     "showMore": "もっと見る",
     "showLess": "折りたたむ",
-    "retry": "再試行"
+    "retry": "再試行",
+    "noApiKeysMsg": "APIキーが設定されていません。「AI Agent: Configure API Keys」を実行してください。",
+    "configureKeys": "設定する"
   },
   "step": {
     "parallel": "並列",

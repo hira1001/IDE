@@ -120,9 +120,11 @@ export function App() {
     dryRunResult,
     isGenerating,
     generationError,
+    noApiKeys,
     streamingChunks,
     toolEvents,
     generateWorkflow,
+    dismissNoApiKeys,
     executeWorkflow,
     executeFromStep,
     abortWorkflow,
@@ -372,6 +374,29 @@ export function App() {
           )}
         </div>
       </header>
+
+      {/* ── API Key onboarding banner ──────────── */}
+      {noApiKeys && (
+        <div className="onboarding-banner" role="alert">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+            <circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.3"/>
+            <path d="M7 4v3.5M7 9.5v.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+          </svg>
+          <span>{t('app.noApiKeysMsg') || 'No API key configured. Run "AI Agent: Configure API Keys" to get started.'}</span>
+          <button
+            className="btn btn--ghost btn--xs"
+            onClick={() => { postMessage({ type: 'command:configureApiKeys' }); dismissNoApiKeys(); }}
+          >
+            {t('app.configureKeys') || 'Configure'}
+          </button>
+          <button
+            className="btn btn--icon-only btn--ghost btn--xs"
+            onClick={dismissNoApiKeys}
+            aria-label="Dismiss"
+            style={{ marginLeft: 2 }}
+          >✕</button>
+        </div>
+      )}
 
       {/* ── Chat / MetaAI input ─────────────────── */}
       <div className="app__chat">

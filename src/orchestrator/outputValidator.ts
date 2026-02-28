@@ -30,11 +30,23 @@ export class OutputValidator {
   }
 
   private validateMarkdown(content: string): ValidationOutcome {
-    // Fail if it looks like raw JSON or XML
-    if (content.startsWith('{') || content.startsWith('[') || content.startsWith('<')) {
+    // Fail if the ENTIRE output looks like raw JSON or XML (not just a code block inside Markdown)
+    // Allow: content that starts with { or [ but contains Markdown headings/list markers elsewhere
+    const looksLikeBareJson =
+      (content.startsWith('{') || content.startsWith('[')) &&
+      !content.includes('\n#') &&
+      !content.includes('\n-') &&
+      !content.includes('\n*') &&
+      !content.includes('\n>');
+    const looksLikeBareXml =
+      content.startsWith('<') &&
+      !content.includes('```') &&
+      !content.includes('\n#');
+
+    if (looksLikeBareJson || looksLikeBareXml) {
       return {
         pass: false,
-        reason: 'Output appears to be JSON/XML, expected Markdown text.',
+        reason: 'Output appears to be raw JSON/XML without Markdown structure.',
       };
     }
     return { pass: true };
@@ -81,7 +93,12 @@ export class OutputValidator {
   }
 
   private validateCode(content: string): ValidationOutcome {
-    // Accept content with at least one recognizable code pattern
+    // Accept content with at least one recognizable code pattern.
+    // Also accept code inside markdown fences (```lang ... ```) as valid Code output.
+    if (/```[\s\S]*?```/.test(content)) {
+      return { pass: true };
+    }
+
     const codePatterns = [
       /import\s+/,
       /export\s+/,
@@ -95,6 +112,9 @@ export class OutputValidator {
       /private\s+\w+/,
       /#include/,
       /package\s+main/,
+      /return\s+/,
+      /^\s*#\s+\w+:/m,   // YAML key
+      /^\s*\w+:\s+/m,    // YAML / config key-value
     ];
 
     const hasCode = codePatterns.some((p) => p.test(content));

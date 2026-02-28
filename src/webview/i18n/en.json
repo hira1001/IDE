@@ -18,7 +18,7 @@
     "emptyStateSub": "or load an existing template",
     "examples": "Examples",
     "examplePrompts": [
-      "Draft a blog post about {{topic}}, then have an editor review and improve it",
+      "Draft a blog post about the future of AI coding assistants, then have an editor review and improve it",
       "Analyze this TypeScript file for bugs and suggest fixes",
       "Write unit tests for the active file, then have a reviewer check coverage",
       "Summarize this code, then generate documentation in Markdown"
@@ -31,7 +31,9 @@
     "cancelGeneration": "Cancel",
     "showMore": "Show more",
     "showLess": "Show less",
-    "retry": "Retry"
+    "retry": "Retry",
+    "noApiKeysMsg": "No API key configured. Run \"AI Agent: Configure API Keys\" to get started.",
+    "configureKeys": "Configure"
   },
   "step": {
     "parallel": "Parallel",

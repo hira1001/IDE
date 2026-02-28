@@ -57,6 +57,14 @@
         "category": "AI Agent"
       }
     ],
+    "keybindings": [
+      {
+        "command": "aiAgentOrchestrator.openPanel",
+        "key": "ctrl+shift+a",
+        "mac": "cmd+shift+a",
+        "when": "!aiAgentOrchestratorFocused"
+      }
+    ],
     "configuration": {
       "title": "AI Agent Orchestrator",
       "properties": {

@@ -193,8 +193,26 @@ body {
   color: var(--aao-red);
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
 }
+.error-message span { flex: 1; min-width: 0; word-break: break-word; }
+
+.onboarding-banner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 12px;
+  padding: 8px 12px;
+  background: rgba(59,130,246,0.08);
+  border: 1px solid rgba(59,130,246,0.2);
+  border-radius: var(--aao-r-sm);
+  font-size: 11px;
+  color: var(--aao-blue);
+  animation: fade-in 0.2s ease;
+}
+.onboarding-banner span { flex: 1; min-width: 0; }
 
 /* ─── Pipeline ───────────────────────────────────────────────────────────────── */
 .pipeline-view {

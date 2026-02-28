@@ -20,6 +20,7 @@ interface WorkflowState {
   dryRunResult: DryRunResult | null;
   isGenerating: boolean;
   generationError: string | null;
+  noApiKeys: boolean;
   /** Live streaming text per task_id. Cleared when task reaches 'completed'. */
   streamingChunks: Record<string, string>;
   /** Tool call events per task_id for agentic tasks. Cleared when task completes. */
@@ -35,6 +36,7 @@ const INITIAL_STATE: WorkflowState = {
   dryRunResult: null,
   isGenerating: false,
   generationError: null,
+  noApiKeys: false,
   streamingChunks: {},
   toolEvents: {},
 };
@@ -65,6 +67,11 @@ export function useWorkflowState() {
         case 'context:get': {
           const p = message.payload as { summary: ProjectContextSummary };
           setState((s) => ({ ...s, contextSummary: p.summary }));
+          break;
+        }
+
+        case 'onboarding:no_api_keys': {
+          setState((s) => ({ ...s, noApiKeys: true }));
           break;
         }
 
@@ -184,6 +191,10 @@ export function useWorkflowState() {
     postMessage({ type: 'workflow:abort' });
   }, [postMessage]);
 
+  const dismissNoApiKeys = useCallback(() => {
+    setState((s) => ({ ...s, noApiKeys: false }));
+  }, []);
+
   const abortGenerate = useCallback(() => {
     generationActiveRef.current = false;
     setState((s) => ({ ...s, isGenerating: false, generationError: null }));
@@ -297,6 +308,7 @@ export function useWorkflowState() {
   return {
     ...state,
     generateWorkflow,
+    dismissNoApiKeys,
     executeWorkflow,
     executeFromStep,
     abortWorkflow,

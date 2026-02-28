@@ -209,6 +209,13 @@ async function handleWebviewMessage(
       if (savedState && (savedState.status === 'completed' || savedState.status === 'error')) {
         postMessage({ type: 'status:update', payload: { execution_state: savedState } });
       }
+
+      // First-time onboarding: notify webview when no API keys are configured
+      const { openai, anthropic, google } = await getApiKeys(context);
+      const hasVscodeLM = (await vscode.lm.selectChatModels({})).length > 0;
+      if (!openai && !anthropic && !google && !hasVscodeLM) {
+        postMessage({ type: 'onboarding:no_api_keys' });
+      }
       break;
     }
 
@@ -225,6 +232,11 @@ async function handleWebviewMessage(
       const ctx = await projectContextProvider.buildProjectContext(workspaceRoot, opts);
       const summary = projectContextProvider.buildSummary(ctx);
       postMessage({ type: 'context:get', payload: { summary } });
+      break;
+    }
+
+    case 'command:configureApiKeys': {
+      await configureApiKeys(context);
       break;
     }
 
