@@ -3,6 +3,14 @@ import { Orchestrator } from './orchestrator.js';
 import { WorkflowConfig, Agent, WorkflowStep, Task } from '../types/index.js';
 import * as gatewayModule from '../llm/gateway.js';
 
+// ─── Mock AgentLoopEngine ────────────────────────────────────────────────────
+const mockAgentLoopRun = vi.fn();
+vi.mock('./reactLoop.js', () => ({
+  AgentLoopEngine: vi.fn().mockImplementation(() => ({
+    run: mockAgentLoopRun,
+  })),
+}));
+
 // Setup Mock Gateway
 const mockChat = vi.fn();
 vi.mock('../llm/gateway.js', async () => {
@@ -258,6 +266,144 @@ describe('Orchestrator', () => {
 
             const st = orchestrator.getStateManager().serialize();
             expect(st.status).toBe('aborted');
+        });
+    });
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Agentic mode (use_tools: true) — uses mocked AgentLoopEngine
+    // ─────────────────────────────────────────────────────────────────────
+    describe('Agentic mode (use_tools)', () => {
+        const agenticTask: Task = {
+            task_id: 'agentic_1',
+            task_name: 'Agentic Task',
+            agent_id: 'agent_1',
+            instructions: ['Fix all TypeScript errors'],
+            constraints: [],
+            input_mapping: [],
+            output_key: 'agentic_out',
+            output_format: 'PlainText',
+            enable_handover_note: false,
+            use_tools: true,
+        };
+
+        const agenticConfig: WorkflowConfig = {
+            agents: [mockAgent],
+            workflow: [{ step: 1, type: 'sequential', tasks: [agenticTask], pause_after: false }],
+        };
+
+        const source = {
+            content: 'src', filename: 'test.ts', language_id: 'typescript', line_count: 1, byte_size: 10,
+        };
+
+        beforeEach(() => {
+            mockAgentLoopRun.mockResolvedValue({
+                finalText: 'Agentic result',
+                totalInputTokens: 20,
+                totalOutputTokens: 15,
+                iterations: 3,
+                filesChanged: [],
+            });
+        });
+
+        it('runs agentic task and stores output in state', async () => {
+            const testOrch = new Orchestrator({ apiKeys, onStatusUpdate: mockStatusUpdate, workspaceRoot: '/tmp' });
+            await testOrch.execute(agenticConfig, source);
+
+            const st = testOrch.getStateManager().serialize();
+            expect(st.status).toBe('completed');
+            expect(st.task_states['agentic_1'].status).toBe('completed');
+            expect(st.output_store['agentic_out']).toBe('Agentic result');
+        });
+
+        it('accumulates token usage from AgentLoopEngine result', async () => {
+            mockAgentLoopRun.mockResolvedValueOnce({
+                finalText: 'done',
+                totalInputTokens: 100,
+                totalOutputTokens: 80,
+                iterations: 5,
+                filesChanged: ['src/foo.ts', 'src/bar.ts'],
+            });
+            const testOrch = new Orchestrator({ apiKeys, onStatusUpdate: mockStatusUpdate, workspaceRoot: '/tmp' });
+            await testOrch.execute(agenticConfig, source);
+
+            const st = testOrch.getStateManager().serialize();
+            expect(st.total_input_tokens).toBe(100);
+            expect(st.total_output_tokens).toBe(80);
+        });
+
+        it('emits completed state after agentic task finishes', async () => {
+            const statusUpdates: string[] = [];
+            const testOrch = new Orchestrator({
+                apiKeys,
+                onStatusUpdate: (state) => statusUpdates.push(state.status),
+                workspaceRoot: '/tmp',
+            });
+            await testOrch.execute(agenticConfig, source);
+
+            // Workflow should be 'completed'; task should be 'completed'
+            expect(statusUpdates).toContain('completed');
+            const taskStatus = testOrch.getStateManager().serialize().task_states['agentic_1'].status;
+            expect(taskStatus).toBe('completed');
+        });
+
+        it('sets task status to tool_calling during agentic execution', async () => {
+            const seenStatuses: string[] = [];
+            mockAgentLoopRun.mockImplementationOnce(async () => {
+                // Capture status at the moment loop.run() is called — it should be 'tool_calling'
+                const st = testOrch.getStateManager().serialize();
+                seenStatuses.push(st.task_states['agentic_1'].status);
+                return { finalText: 'ok', totalInputTokens: 5, totalOutputTokens: 5, iterations: 1, filesChanged: [] };
+            });
+            const testOrch = new Orchestrator({ apiKeys, onStatusUpdate: mockStatusUpdate, workspaceRoot: '/tmp' });
+            await testOrch.execute(agenticConfig, source);
+
+            expect(seenStatuses).toContain('tool_calling');
+        });
+
+        it('records error state when AgentLoopEngine throws', async () => {
+            mockAgentLoopRun.mockRejectedValueOnce(new Error('LLM API error'));
+            const testOrch = new Orchestrator({ apiKeys, onStatusUpdate: mockStatusUpdate, workspaceRoot: '/tmp' });
+            await testOrch.execute(agenticConfig, source);
+
+            const st = testOrch.getStateManager().serialize();
+            expect(st.task_states['agentic_1'].status).toBe('error');
+        });
+
+        it('records aborted state when AgentLoopEngine throws AbortError', async () => {
+            const abortErr = new Error('Aborted');
+            abortErr.name = 'AbortError';
+            mockAgentLoopRun.mockImplementationOnce(() => new Promise((_, rej) => {
+                setTimeout(() => rej(abortErr), 10);
+            }));
+
+            const testOrch = new Orchestrator({ apiKeys, onStatusUpdate: mockStatusUpdate, workspaceRoot: '/tmp' });
+            const execPromise = testOrch.execute(agenticConfig, source);
+            setTimeout(() => testOrch.abort(), 5);
+            await execPromise;
+
+            const st = testOrch.getStateManager().serialize();
+            expect(st.status).toBe('aborted');
+        });
+
+        it('passes allowed_tools to AgentLoopEngine via getAllowedTools', async () => {
+            const restrictedTask: Task = {
+                ...agenticTask,
+                task_id: 'restricted_1',
+                output_key: 'restricted_out',
+                allowed_tools: ['read_file', 'list_files'],
+            };
+            const restrictedConfig: WorkflowConfig = {
+                agents: [mockAgent],
+                workflow: [{ step: 1, type: 'sequential', tasks: [restrictedTask], pause_after: false }],
+            };
+
+            const testOrch = new Orchestrator({ apiKeys, onStatusUpdate: mockStatusUpdate, workspaceRoot: '/tmp' });
+            await testOrch.execute(restrictedConfig, source);
+
+            // AgentLoopEngine.run should have been called once and succeeded
+            expect(mockAgentLoopRun).toHaveBeenCalledTimes(1);
+            const st = testOrch.getStateManager().serialize();
+            expect(st.task_states['restricted_1'].status).toBe('completed');
         });
     });
 });

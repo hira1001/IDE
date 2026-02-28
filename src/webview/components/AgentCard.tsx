@@ -5,6 +5,11 @@ import { useVSCode } from '../hooks/useVSCode.js';
 import { useAutoResize } from '../hooks/useAutoResize.js';
 import { ToolCallLog, ToolEvent } from './ToolCallLog.js';
 
+const ALL_AGENT_TOOLS = [
+  'read_file', 'write_file', 'edit_file', 'list_files',
+  'search_code', 'get_diagnostics', 'get_definition', 'find_references', 'run_terminal',
+] as const;
+
 const LLM_MODEL_GROUPS: { label: string; models: LLMModel[] }[] = [
   {
     label: 'OpenAI',
@@ -76,6 +81,7 @@ export function AgentCard({
   const [elapsed, setElapsed] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const streamingRef = useRef<HTMLDivElement>(null);
+  const [vscodeLMModels, setVscodeLMModels] = useState<string[]>([]);
 
   // Fullscreen instruction modal
   const [showInstructionModal, setShowInstructionModal] = useState(false);
@@ -140,6 +146,20 @@ export function AgentCard({
   useEffect(() => {
     if (status === 'error') setExpanded(true);
   }, [status]);
+
+  // Fetch VS Code LM models once on mount
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      const msg = event.data as { type: string; payload?: unknown };
+      if (msg.type !== 'lm:models_list') return;
+      const p = msg.payload as { models: string[] };
+      setVscodeLMModels(p.models ?? []);
+    };
+    window.addEventListener('message', handler);
+    postMessage({ type: 'lm:models_list' });
+    return () => window.removeEventListener('message', handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Listen for "Draft with AI" response from the extension host
   useEffect(() => {
@@ -526,6 +546,7 @@ export function AgentCard({
                 {LLM_MODEL_GROUPS.flatMap((group) =>
                   group.models.map((m) => <option key={m} value={m}>{group.label} — {m}</option>)
                 )}
+                {vscodeLMModels.map((m) => <option key={m} value={m}>VS Code LM — {m}</option>)}
               </datalist>
             </div>
 
@@ -545,7 +566,7 @@ export function AgentCard({
 
             {/* Agent Mode options — shown only when use_tools is enabled */}
             {task.use_tools && (
-              <div style={{ paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <label className="field-checkbox">
                   <input type="checkbox" checked={task.auto_apply_edits ?? true}
                     onChange={(e) => onUpdateTask({ ...task, auto_apply_edits: e.target.checked })} />
@@ -562,6 +583,35 @@ export function AgentCard({
                     value={task.max_tool_iterations ?? 10}
                     onChange={(e) => onUpdateTask({ ...task, max_tool_iterations: Number(e.target.value) })}
                   />
+                </div>
+                <div className="field-group" style={{ marginBottom: 0 }}>
+                  <label className="field-label">{t('card.allowedTools', 'Allowed tools (all if none selected)')}</label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px' }}>
+                    {ALL_AGENT_TOOLS.map((tool) => {
+                      const allowed = task.allowed_tools;
+                      const isChecked = !allowed || allowed.length === 0 || allowed.includes(tool);
+                      return (
+                        <label key={tool} className="field-checkbox" style={{ fontSize: 11, marginBottom: 0 }}>
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              const current = allowed && allowed.length > 0
+                                ? [...allowed]
+                                : [...ALL_AGENT_TOOLS];
+                              const updated = e.target.checked
+                                ? [...new Set([...current, tool])]
+                                : current.filter((t) => t !== tool);
+                              // If all are selected, store as empty (meaning 'all')
+                              const next = updated.length === ALL_AGENT_TOOLS.length ? [] : updated;
+                              onUpdateTask({ ...task, allowed_tools: next });
+                            }}
+                          />
+                          {tool}
+                        </label>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             )}

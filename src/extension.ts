@@ -58,6 +58,68 @@ export function activate(context: vscode.ExtensionContext): void {
     })
   );
 
+  // ─── External agent integration commands ─────────────────────────────────
+  // These commands allow Cursor Composer, Google Antigravity, and other AI
+  // agents to invoke the orchestrator programmatically.
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'aiAgentOrchestrator.runPrompt',
+      async (args?: { prompt: string; model?: string; systemPrompt?: string }) => {
+        if (!args?.prompt) {
+          vscode.window.showErrorMessage('aiAgentOrchestrator.runPrompt: "prompt" argument is required.');
+          return undefined;
+        }
+        const apiKeys = await getApiKeys(context);
+        const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        const vscodeLM = vscode as unknown as VscodeLMApi;
+        const model = args.model ?? 'gpt-4o';
+
+        const singleTaskConfig: WorkflowConfig = {
+          agents: [{
+            id: 'external_agent',
+            name: 'External Agent',
+            persona: args.systemPrompt ?? 'You are a helpful AI assistant.',
+            model,
+          }],
+          workflow: [{
+            step: 1,
+            type: 'sequential',
+            tasks: [{
+              task_id: 'external_task',
+              task_name: 'External Prompt',
+              agent_id: 'external_agent',
+              instructions: [args.prompt],
+              constraints: [],
+              input_mapping: [],
+              output_key: 'external_output',
+              output_format: 'PlainText' as OutputFormat,
+              enable_handover_note: false,
+            }],
+            pause_after: false,
+          }],
+        };
+
+        const orch = new Orchestrator({
+          apiKeys,
+          workspaceRoot,
+          vscodeLM,
+        });
+        await orch.execute(singleTaskConfig, {
+          content: '', filename: '', language_id: '', line_count: 0, byte_size: 0,
+        });
+        return orch.getStateManager().serialize().output_store['external_output'];
+      }
+    )
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('aiAgentOrchestrator.getLastOutput', () => {
+      if (!currentOrchestrator) return undefined;
+      return currentOrchestrator.getStateManager().serialize().output_store;
+    })
+  );
+
   // ─── Status Bar ──────────────────────────────────────────────────────────
 
   const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);

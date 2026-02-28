@@ -42,6 +42,16 @@
         "command": "aiAgentOrchestrator.configureApiKeys",
         "title": "%commands.configureApiKeys%",
         "category": "AI Agent"
+      },
+      {
+        "command": "aiAgentOrchestrator.runPrompt",
+        "title": "Run Prompt (for external agents)",
+        "category": "AI Agent"
+      },
+      {
+        "command": "aiAgentOrchestrator.getLastOutput",
+        "title": "Get Last Output (for external agents)",
+        "category": "AI Agent"
       }
     ],
     "configuration": {

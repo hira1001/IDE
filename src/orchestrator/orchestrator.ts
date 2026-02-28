@@ -509,6 +509,7 @@ export class Orchestrator {
         'complete',
         `${result.totalInputTokens}in+${result.totalOutputTokens}out tokens, ${result.iterations} iterations, ${result.filesChanged.length} files changed`
       );
+      this.emit();
     } finally {
       this.activeLoopAbortControllers.delete(taskId);
     }
