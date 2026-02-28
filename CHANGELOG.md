@@ -2,7 +2,7 @@
 
 All notable changes to AI Agent Orchestrator are documented here.
 
-## [Unreleased]
+## [0.1.0] - 2026-02-28
 
 ### Added
 - Initial implementation based on design document v3.0

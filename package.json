@@ -24,7 +24,10 @@
     "url": "https://github.com/ai-agent-orchestrator/vscode-extension"
   },
   "icon": "media/icon.png",
-  "activationEvents": [],
+  "activationEvents": [
+    "onCommand:aiAgentOrchestrator.openPanel",
+    "onStartupFinished"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
