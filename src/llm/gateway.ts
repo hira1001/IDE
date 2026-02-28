@@ -36,7 +36,7 @@ export function getGateway(
   if (model.startsWith('ollama:')) {
     return new OllamaAdapter(apiKeys.ollama ?? 'http://localhost:11434');
   }
-  if (model.startsWith('gpt-')) {
+  if (isOpenAIModel(model)) {
     if (!apiKeys.openai) throw new Error('OpenAI API key is not configured.');
     return new OpenAIAdapter(apiKeys.openai);
   }
@@ -51,10 +51,15 @@ export function getGateway(
   throw new Error(`Unknown model: ${model}`);
 }
 
+/** Returns true for any OpenAI model (gpt-*, o1*, o3*). */
+function isOpenAIModel(model: string): boolean {
+  return model.startsWith('gpt-') || model.startsWith('o1') || model.startsWith('o3');
+}
+
 export function getProviderFromModel(model: LLMModel): 'openai' | 'anthropic' | 'google' | 'ollama' | 'vscode' {
   if (model.startsWith('vscode:')) return 'vscode';
   if (model.startsWith('ollama:')) return 'ollama';
-  if (model.startsWith('gpt-')) return 'openai';
+  if (isOpenAIModel(model)) return 'openai';
   if (model.startsWith('claude-')) return 'anthropic';
   if (model.startsWith('gemini-')) return 'google';
   throw new Error(`Unknown model provider for: ${model}`);
