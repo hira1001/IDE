@@ -21,7 +21,7 @@ function makeVscodeMock(overrides: Partial<{
 
   return {
     lm: {
-      selectChatModels: overrides.selectModels ?? vi.fn().mockResolvedValue([model]),
+      selectChatModels: (overrides.selectModels ?? vi.fn().mockResolvedValue([model])) as VscodeLMApi['lm']['selectChatModels'],
     },
     LanguageModelChatMessage: {
       User: (content: string) => ({ role: 'user', content }),

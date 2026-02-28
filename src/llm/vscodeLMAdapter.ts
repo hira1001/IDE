@@ -133,7 +133,7 @@ export interface VscodeLMApi {
     User(content: string): VscodeChatMessage;
     Assistant(content: string): VscodeChatMessage;
   };
-  CancellationTokenSource: new () => { token: unknown };
+  CancellationTokenSource: new () => { token: unknown; cancel(): void };
 }
 
 export interface VscodeLMModel {

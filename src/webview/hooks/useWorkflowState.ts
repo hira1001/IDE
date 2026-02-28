@@ -11,6 +11,14 @@ import {
 } from '../../types/index.js';
 import { useVSCode } from './useVSCode.js';
 
+export interface AvailableModels {
+  openai: string[];
+  anthropic: string[];
+  google: string[];
+  ollama: string[];
+  vscodeLM: string[];
+}
+
 interface WorkflowState {
   config: WorkflowConfig | null;
   executionState: SerializedExecutionState | null;
@@ -21,11 +29,16 @@ interface WorkflowState {
   isGenerating: boolean;
   generationError: string | null;
   noApiKeys: boolean;
+  availableModels: AvailableModels;
   /** Live streaming text per task_id. Cleared when task reaches 'completed'. */
   streamingChunks: Record<string, string>;
   /** Tool call events per task_id for agentic tasks. Cleared when task completes. */
   toolEvents: Record<string, Array<{ event_type: string; tool_name?: string; content?: string; iteration?: number }>>;
 }
+
+const EMPTY_AVAILABLE_MODELS: AvailableModels = {
+  openai: [], anthropic: [], google: [], ollama: [], vscodeLM: [],
+};
 
 const INITIAL_STATE: WorkflowState = {
   config: null,
@@ -37,6 +50,7 @@ const INITIAL_STATE: WorkflowState = {
   isGenerating: false,
   generationError: null,
   noApiKeys: false,
+  availableModels: EMPTY_AVAILABLE_MODELS,
   streamingChunks: {},
   toolEvents: {},
 };
@@ -156,6 +170,26 @@ export function useWorkflowState() {
         case 'template:open_selector': {
           // Request template list and show selector
           postMessage({ type: 'template:list' });
+          break;
+        }
+
+        case 'settings:current': {
+          const p = message.payload as {
+            availableModels?: AvailableModels;
+            openai?: 'set' | 'unset';
+            anthropic?: 'set' | 'unset';
+            google?: 'set' | 'unset';
+            vscodeLMCount?: number;
+          };
+          if (p.availableModels) {
+            setState((s) => ({ ...s, availableModels: p.availableModels! }));
+          }
+          // If all keys are now set, dismiss the no-api-keys banner
+          const hasAnyKey = p.openai === 'set' || p.anthropic === 'set' || p.google === 'set';
+          const hasVscodeLM = (p.vscodeLMCount ?? 0) > 0;
+          if (hasAnyKey || hasVscodeLM) {
+            setState((s) => ({ ...s, noApiKeys: false }));
+          }
           break;
         }
       }
@@ -330,5 +364,6 @@ export function useWorkflowState() {
     canRedo: historySize.canRedo,
     streamingChunks: state.streamingChunks,
     toolEvents: state.toolEvents,
+    availableModels: state.availableModels,
   };
 }

@@ -66,6 +66,7 @@ Hope it helps!`;
                 filename: 'app.ts',
                 language_id: 'typescript',
                 line_count: 42,
+                byte_size: 0,
                 content: '',
             });
             const callArgs = mockChat.mock.calls[0][0] as { system_prompt: string };

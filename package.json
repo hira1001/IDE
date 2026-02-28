@@ -55,6 +55,11 @@
         "command": "aiAgentOrchestrator.getLastOutput",
         "title": "Get Last Output (for external agents)",
         "category": "AI Agent"
+      },
+      {
+        "command": "aiAgentOrchestrator.resetState",
+        "title": "Reset Extension State",
+        "category": "AI Agent"
       }
     ],
     "keybindings": [

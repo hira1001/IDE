@@ -30,6 +30,42 @@ const EXTENSION_ID = 'ai-agent-orchestrator';
 let currentPanel: vscode.WebviewPanel | undefined;
 let currentOrchestrator: Orchestrator | undefined;
 
+// ─── Available Models Lists ────────────────────────────────────────────────────
+
+const OPENAI_MODELS = [
+  'o3', 'o3-mini', 'o1', 'o1-mini', 'o1-preview',
+  'gpt-4o', 'gpt-4o-mini', 'gpt-4o-2024-11-20', 'gpt-4o-2024-08-06', 'gpt-4o-2024-05-13', 'gpt-4o-mini-2024-07-18',
+  'gpt-4-turbo', 'gpt-4-turbo-preview', 'gpt-4-turbo-2024-04-09', 'gpt-4-0125-preview', 'gpt-4-1106-preview',
+  'gpt-4', 'gpt-4-0613', 'gpt-4-32k', 'gpt-4-32k-0613',
+  'gpt-3.5-turbo', 'gpt-3.5-turbo-0125', 'gpt-3.5-turbo-1106', 'gpt-3.5-turbo-16k',
+];
+
+const ANTHROPIC_MODELS = [
+  'claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5',
+  'claude-3-5-sonnet-20241022', 'claude-3-5-sonnet-20240620', 'claude-3-5-haiku-20241022',
+  'claude-3-opus-20240229', 'claude-3-sonnet-20240229', 'claude-3-haiku-20240307',
+];
+
+const GOOGLE_MODELS = [
+  'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-2.0-flash-thinking-exp', 'gemini-2.0-pro-exp', 'gemini-2.5-pro-exp-03-25',
+  'gemini-1.5-pro', 'gemini-1.5-pro-002', 'gemini-1.5-flash', 'gemini-1.5-flash-002', 'gemini-1.5-flash-8b',
+  'gemini-1.0-pro', 'gemini-ultra',
+];
+
+const SECRET_KEYS = [
+  'aiAgentOrchestrator.openaiKey',
+  'aiAgentOrchestrator.anthropicKey',
+  'aiAgentOrchestrator.googleKey',
+];
+
+interface AvailableModels {
+  openai: string[];
+  anthropic: string[];
+  google: string[];
+  ollama: string[];
+  vscodeLM: string[];
+}
+
 export function activate(context: vscode.ExtensionContext): void {
   const fileContextProvider = new FileContextProvider();
   const projectContextProvider = new ProjectContextProvider(fileContextProvider);
@@ -56,6 +92,25 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('aiAgentOrchestrator.configureApiKeys', async () => {
       await configureApiKeys(context);
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('aiAgentOrchestrator.resetState', async () => {
+      const ok = await vscode.window.showWarningMessage(
+        'Reset all extension data? API keys and saved state will be cleared.',
+        { modal: true },
+        'Reset',
+        'Cancel'
+      );
+      if (ok !== 'Reset') return;
+      for (const key of SECRET_KEYS) {
+        try { await context.secrets.delete(key); } catch { /* ignore */ }
+      }
+      await context.globalState.update('lastExecutionState', undefined);
+      vscode.window.showInformationMessage('AI Agent: Extension state has been reset.');
+      const settingsCurrent = await buildSettingsCurrent(context);
+      postMessage({ type: 'settings:current', payload: settingsCurrent });
     })
   );
 
@@ -114,6 +169,7 @@ export function activate(context: vscode.ExtensionContext): void {
           apiKeys,
           workspaceRoot,
           vscodeLM,
+          onStatusUpdate: () => undefined,
         });
         await orch.execute(singleTaskConfig, {
           content: '', filename: '', language_id: '', line_count: 0, byte_size: 0,
@@ -210,10 +266,14 @@ async function handleWebviewMessage(
         postMessage({ type: 'status:update', payload: { execution_state: savedState } });
       }
 
+      // Send current settings (available models + key status) on startup
+      const settingsCurrent = await buildSettingsCurrent(context);
+      postMessage({ type: 'settings:current', payload: settingsCurrent });
+
       // First-time onboarding: notify webview when no API keys are configured
-      const { openai, anthropic, google } = await getApiKeys(context);
-      const hasVscodeLM = (await vscode.lm.selectChatModels({})).length > 0;
-      if (!openai && !anthropic && !google && !hasVscodeLM) {
+      const hasAnyKey = settingsCurrent.openai === 'set' || settingsCurrent.anthropic === 'set' || settingsCurrent.google === 'set';
+      const hasVscodeLM = settingsCurrent.vscodeLMCount > 0;
+      if (!hasAnyKey && !hasVscodeLM) {
         postMessage({ type: 'onboarding:no_api_keys' });
       }
       break;
@@ -237,6 +297,11 @@ async function handleWebviewMessage(
 
     case 'command:configureApiKeys': {
       await configureApiKeys(context);
+      break;
+    }
+
+    case 'command:resetState': {
+      await vscode.commands.executeCommand('aiAgentOrchestrator.resetState');
       break;
     }
 
@@ -478,6 +543,91 @@ async function handleWebviewMessage(
       break;
     }
 
+    case 'settings:get': {
+      const settingsCurrent = await buildSettingsCurrent(context);
+      postMessage({ type: 'settings:current', payload: settingsCurrent });
+      break;
+    }
+
+    case 'settings:save': {
+      const p = message.payload as { provider: 'openai' | 'anthropic' | 'google'; key: string };
+      const secretKeyMap: Record<string, string> = {
+        openai: 'aiAgentOrchestrator.openaiKey',
+        anthropic: 'aiAgentOrchestrator.anthropicKey',
+        google: 'aiAgentOrchestrator.googleKey',
+      };
+      const secretKey = secretKeyMap[p.provider];
+      if (secretKey && p.key) {
+        try {
+          await safeSecretsStore(context, secretKey, p.key);
+          // Auto-set defaultModel if current default is from an unconfigured provider
+          await autoUpdateDefaultModel(context, p.provider);
+          postMessage({ type: 'settings:saved', payload: { provider: p.provider, success: true } });
+          const updated = await buildSettingsCurrent(context);
+          postMessage({ type: 'settings:current', payload: updated });
+        } catch {
+          postMessage({ type: 'settings:saved', payload: { provider: p.provider, success: false } });
+        }
+      }
+      break;
+    }
+
+    case 'settings:clear': {
+      const p = message.payload as { provider: 'openai' | 'anthropic' | 'google' };
+      const secretKeyMap: Record<string, string> = {
+        openai: 'aiAgentOrchestrator.openaiKey',
+        anthropic: 'aiAgentOrchestrator.anthropicKey',
+        google: 'aiAgentOrchestrator.googleKey',
+      };
+      const secretKey = secretKeyMap[p.provider];
+      if (secretKey) {
+        try { await context.secrets.delete(secretKey); } catch { /* ignore */ }
+        // Also clear fallback
+        await context.globalState.update(FALLBACK_SECRET_PREFIX + secretKey, undefined);
+        const updated = await buildSettingsCurrent(context);
+        postMessage({ type: 'settings:current', payload: updated });
+      }
+      break;
+    }
+
+    case 'settings:save_ollama': {
+      const p = message.payload as { endpoint: string };
+      await vscode.workspace
+        .getConfiguration('aiAgentOrchestrator')
+        .update('ollamaEndpoint', p.endpoint, vscode.ConfigurationTarget.Global);
+      const updated = await buildSettingsCurrent(context);
+      postMessage({ type: 'settings:current', payload: updated });
+      break;
+    }
+
+    case 'settings:test_ollama': {
+      const p = message.payload as { endpoint: string };
+      const endpoint = p.endpoint.replace(/\/+$/, '');
+      const start = Date.now();
+      try {
+        const res = await fetch(`${endpoint}/api/tags`, {
+          signal: AbortSignal.timeout(5000),
+        });
+        if (res.ok) {
+          postMessage({ type: 'settings:ollama_result', payload: { ok: true, latency: Date.now() - start } });
+        } else {
+          postMessage({ type: 'settings:ollama_result', payload: { ok: false, error: `HTTP ${res.status}` } });
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        postMessage({ type: 'settings:ollama_result', payload: { ok: false, error: msg } });
+      }
+      break;
+    }
+
+    case 'settings:save_default_model': {
+      const p = message.payload as { model: string };
+      await vscode.workspace
+        .getConfiguration('aiAgentOrchestrator')
+        .update('defaultModel', p.model, vscode.ConfigurationTarget.Global);
+      break;
+    }
+
     default:
       console.warn('[Extension] Unknown message type:', message.type);
   }
@@ -678,25 +828,138 @@ async function getApiKeys(context: vscode.ExtensionContext): Promise<ApiKeys> {
 
 async function configureApiKeys(context: vscode.ExtensionContext): Promise<void> {
   const providers = [
-    { name: 'OpenAI', secretKey: 'aiAgentOrchestrator.openaiKey', placeholder: 'sk-...' },
-    { name: 'Anthropic', secretKey: 'aiAgentOrchestrator.anthropicKey', placeholder: 'sk-ant-...' },
-    { name: 'Google AI', secretKey: 'aiAgentOrchestrator.googleKey', placeholder: 'AIza...' },
+    { id: 'openai',    name: 'OpenAI',    secretKey: 'aiAgentOrchestrator.openaiKey',    placeholder: 'sk-...' },
+    { id: 'anthropic', name: 'Anthropic', secretKey: 'aiAgentOrchestrator.anthropicKey', placeholder: 'sk-ant-...' },
+    { id: 'google',    name: 'Google AI', secretKey: 'aiAgentOrchestrator.googleKey',    placeholder: 'AIza...' },
   ];
 
-  for (const provider of providers) {
-    const current = await safeSecretsGet(context, provider.secretKey);
+  const items = await Promise.all(providers.map(async (p) => {
+    const current = await safeSecretsGet(context, p.secretKey);
+    return {
+      label: p.name,
+      description: current ? '✅ Configured' : '⚪ Not set',
+      secretKey: p.secretKey,
+      placeholder: p.placeholder,
+      id: p.id,
+    };
+  }));
+
+  const selected = await vscode.window.showQuickPick(items, {
+    canPickMany: true,
+    title: 'Configure API Keys — Select providers to configure',
+    placeHolder: 'Select one or more providers',
+  });
+
+  if (!selected || selected.length === 0) return;
+
+  for (const provider of selected) {
     const input = await vscode.window.showInputBox({
-      title: `Configure ${provider.name} API Key`,
-      prompt: `Enter your ${provider.name} API key (leave empty to skip)`,
+      title: `Configure ${provider.label} API Key`,
+      prompt: `Enter your ${provider.label} API key`,
       placeHolder: provider.placeholder,
-      value: current ? '••••••••' : '',
       password: true,
     });
-
-    if (input !== undefined && input !== '' && input !== '••••••••') {
+    if (input !== undefined && input !== '') {
       await safeSecretsStore(context, provider.secretKey, input);
-      vscode.window.showInformationMessage(`${provider.name} API key saved.`);
+      await autoUpdateDefaultModel(context, provider.id as 'openai' | 'anthropic' | 'google');
+      vscode.window.showInformationMessage(`${provider.label} API key saved.`);
+      const updated = await buildSettingsCurrent(context);
+      postMessage({ type: 'settings:current', payload: updated });
     }
+  }
+}
+
+// ─── Settings Helpers ─────────────────────────────────────────────────────────
+
+async function getAvailableModels(context: vscode.ExtensionContext): Promise<AvailableModels> {
+  const openaiKey = await safeSecretsGet(context, 'aiAgentOrchestrator.openaiKey');
+  const anthropicKey = await safeSecretsGet(context, 'aiAgentOrchestrator.anthropicKey');
+  const googleKey = await safeSecretsGet(context, 'aiAgentOrchestrator.googleKey');
+
+  const ollamaEndpoint = vscode.workspace
+    .getConfiguration('aiAgentOrchestrator')
+    .get<string>('ollamaEndpoint', 'http://localhost:11434');
+
+  let ollamaModels: string[] = [];
+  try {
+    const res = await fetch(`${ollamaEndpoint.replace(/\/+$/, '')}/api/tags`, {
+      signal: AbortSignal.timeout(2000),
+    });
+    if (res.ok) {
+      const data = await res.json() as { models?: { name: string }[] };
+      ollamaModels = (data.models ?? []).map((m) => m.name);
+    }
+  } catch { /* Ollama not running */ }
+
+  const vscodeLMModels = await listVscodeLMModels(vscode as unknown as VscodeLMApi);
+
+  return {
+    openai:   openaiKey    ? OPENAI_MODELS    : [],
+    anthropic: anthropicKey ? ANTHROPIC_MODELS : [],
+    google:   googleKey    ? GOOGLE_MODELS    : [],
+    ollama:   ollamaModels,
+    vscodeLM: vscodeLMModels,
+  };
+}
+
+async function buildSettingsCurrent(context: vscode.ExtensionContext): Promise<{
+  openai: 'set' | 'unset';
+  anthropic: 'set' | 'unset';
+  google: 'set' | 'unset';
+  ollamaEndpoint: string;
+  vscodeLMCount: number;
+  defaultModel: string;
+  availableModels: AvailableModels;
+}> {
+  const openaiKey = await safeSecretsGet(context, 'aiAgentOrchestrator.openaiKey');
+  const anthropicKey = await safeSecretsGet(context, 'aiAgentOrchestrator.anthropicKey');
+  const googleKey = await safeSecretsGet(context, 'aiAgentOrchestrator.googleKey');
+  const cfg = vscode.workspace.getConfiguration('aiAgentOrchestrator');
+  const ollamaEndpoint = cfg.get<string>('ollamaEndpoint', 'http://localhost:11434');
+  const defaultModel = cfg.get<string>('defaultModel', 'gpt-4o');
+  const availableModels = await getAvailableModels(context);
+  const vscodeLMCount = availableModels.vscodeLM.length;
+  return {
+    openai:    openaiKey    ? 'set' : 'unset',
+    anthropic: anthropicKey ? 'set' : 'unset',
+    google:    googleKey    ? 'set' : 'unset',
+    ollamaEndpoint,
+    vscodeLMCount,
+    defaultModel,
+    availableModels,
+  };
+}
+
+/** APIキー保存時に defaultModel のプロバイダーが利用不可なら、新プロバイダーの最初のモデルに自動更新 */
+async function autoUpdateDefaultModel(
+  context: vscode.ExtensionContext,
+  savedProvider: 'openai' | 'anthropic' | 'google'
+): Promise<void> {
+  const cfg = vscode.workspace.getConfiguration('aiAgentOrchestrator');
+  const currentDefault = cfg.get<string>('defaultModel', 'gpt-4o');
+
+  const isOpenAI    = OPENAI_MODELS.includes(currentDefault) || currentDefault.startsWith('gpt-') || currentDefault.startsWith('o1') || currentDefault.startsWith('o3');
+  const isAnthropic = ANTHROPIC_MODELS.includes(currentDefault) || currentDefault.startsWith('claude-');
+  const isGoogle    = GOOGLE_MODELS.includes(currentDefault) || currentDefault.startsWith('gemini-');
+
+  const openaiKey    = await safeSecretsGet(context, 'aiAgentOrchestrator.openaiKey');
+  const anthropicKey = await safeSecretsGet(context, 'aiAgentOrchestrator.anthropicKey');
+  const googleKey    = await safeSecretsGet(context, 'aiAgentOrchestrator.googleKey');
+
+  // If current default is already from a working provider, don't change it
+  if (isOpenAI && openaiKey) return;
+  if (isAnthropic && anthropicKey) return;
+  if (isGoogle && googleKey) return;
+
+  // Auto-set to first model of newly saved provider
+  const firstModelMap: Record<string, string> = {
+    openai:    OPENAI_MODELS[5],    // 'gpt-4o'
+    anthropic: ANTHROPIC_MODELS[1], // 'claude-sonnet-4-6'
+    google:    GOOGLE_MODELS[0],    // 'gemini-2.0-flash'
+  };
+  const newDefault = firstModelMap[savedProvider];
+  if (newDefault) {
+    await cfg.update('defaultModel', newDefault, vscode.ConfigurationTarget.Global);
   }
 }
 

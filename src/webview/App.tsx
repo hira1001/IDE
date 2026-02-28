@@ -8,6 +8,7 @@ import { BreakpointPanel } from './components/BreakpointPanel.js';
 import { TemplateSaveDialog } from './components/TemplateSaveDialog.js';
 import { TemplateSelector } from './components/TemplateSelector.js';
 import { ToastContainer, ToastItem } from './components/Toast.js';
+import { SettingsModal } from './components/SettingsModal.js';
 import { WorkflowTemplate, ProjectContextSummary, SourceInput } from '../types/index.js';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -123,6 +124,7 @@ export function App() {
     noApiKeys,
     streamingChunks,
     toolEvents,
+    availableModels,
     generateWorkflow,
     dismissNoApiKeys,
     executeWorkflow,
@@ -160,6 +162,7 @@ export function App() {
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [showTemplateSelector, setShowTemplateSelector] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [pausedOutputs, setPausedOutputs] = useState<Record<string, string> | null>(null);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
@@ -208,11 +211,13 @@ export function App() {
 
   const handleGenerate = () => {
     if (!instruction.trim()) return;
+    if (noApiKeys) { setShowSettings(true); return; }
     generateWorkflow(instruction);
   };
 
   const handleGenerateAndRun = () => {
     if (!instruction.trim()) return;
+    if (noApiKeys) { setShowSettings(true); return; }
     pendingAutoRunRef.current = true;
     generateWorkflow(instruction);
   };
@@ -234,12 +239,20 @@ export function App() {
     const isEditableTarget =
       target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
 
+    // Ctrl+, → Open Settings (VS Code convention)
+    if ((e.metaKey || e.ctrlKey) && e.key === ',') {
+      e.preventDefault();
+      setShowSettings(true);
+      return;
+    }
+
     // Show shortcuts panel with '?' when not editing text
     if (e.key === '?' && !isEditableTarget) {
       e.preventDefault();
       setShowShortcuts(true);
     }
     if (e.key === 'Escape') {
+      if (showSettings) { setShowSettings(false); return; }
       if (showShortcuts) { setShowShortcuts(false); return; }
       if (showTemplateSelector) { setShowTemplateSelector(false); return; }
       if (showSaveDialog) { setShowSaveDialog(false); return; }
@@ -338,6 +351,17 @@ export function App() {
           >?</button>
           <button
             className="btn btn--icon-only"
+            onClick={() => setShowSettings(true)}
+            title="Settings — API keys, models (Ctrl+,)"
+            aria-label="Open Settings"
+          >
+            <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
+              <circle cx="7.5" cy="7.5" r="2.5" stroke="currentColor" strokeWidth="1.3"/>
+              <path d="M7.5 1v1.5M7.5 12.5V14M1 7.5h1.5M12.5 7.5H14M2.96 2.96l1.06 1.06M10.98 10.98l1.06 1.06M2.96 12.04l1.06-1.06M10.98 4.02l1.06-1.06" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+            </svg>
+          </button>
+          <button
+            className="btn btn--icon-only"
             onClick={handleOpenTemplates}
             title={t('app.loadTemplate')}
             aria-label={t('app.loadTemplate')}
@@ -382,12 +406,12 @@ export function App() {
             <circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.3"/>
             <path d="M7 4v3.5M7 9.5v.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
           </svg>
-          <span>{t('app.noApiKeysMsg') || 'No API key configured. Run "AI Agent: Configure API Keys" to get started.'}</span>
+          <span>{t('app.noApiKeysMsg') || 'No API key configured. Click ⚙ Settings to add your API keys.'}</span>
           <button
             className="btn btn--ghost btn--xs"
-            onClick={() => { postMessage({ type: 'command:configureApiKeys' }); dismissNoApiKeys(); }}
+            onClick={() => { setShowSettings(true); dismissNoApiKeys(); }}
           >
-            {t('app.configureKeys') || 'Configure'}
+            {t('app.configureKeys') || 'Open Settings'}
           </button>
           <button
             className="btn btn--icon-only btn--ghost btn--xs"
@@ -417,7 +441,7 @@ export function App() {
               onClick={handleGenerate}
               disabled={isGenerating || !instruction.trim()}
               aria-label={t('app.generate')}
-              title={`${t('app.generate')} (Ctrl+Enter)`}
+              title="Generate a multi-agent workflow from your description (Ctrl+Enter)"
             >
               {isGenerating ? (
                 <span className="chat-send-btn__spinner" />
@@ -432,7 +456,7 @@ export function App() {
               onClick={handleGenerateAndRun}
               disabled={isGenerating || !instruction.trim()}
               aria-label={t('app.generateAndRun') || 'Generate & Run'}
-              title={`${t('app.generateAndRun') || 'Generate & Run'} (Ctrl+Shift+Enter)`}
+              title="Generate workflow and run it immediately (Ctrl+Shift+Enter)"
             >
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
                 <path d="M2.5 2l10 5-10 5V2z" fill="currentColor"/>
@@ -468,6 +492,7 @@ export function App() {
           const MAX_LEN = 200;
           const truncated = !errorExpanded && generationError.length > MAX_LEN;
           const displayError = truncated ? generationError.slice(0, MAX_LEN) + '…' : generationError;
+          const isAuthError = /auth|key|unauthorized|forbidden|api_key|invalid.*key/i.test(generationError);
           return (
             <div className="error-message" role="alert">
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
@@ -484,10 +509,19 @@ export function App() {
                   {errorExpanded ? (t('app.showLess') || 'Show less') : (t('app.showMore') || 'Show more')}
                 </button>
               )}
+              {isAuthError && (
+                <button
+                  className="btn btn--ghost btn--xs"
+                  onClick={() => setShowSettings(true)}
+                  style={{ marginLeft: 4 }}
+                >
+                  ⚙ Check API Keys
+                </button>
+              )}
               <button
                 className="btn btn--ghost btn--xs"
                 onClick={handleGenerate}
-                style={{ marginLeft: 8 }}
+                style={{ marginLeft: 4 }}
               >
                 {t('app.retry') || 'Retry'}
               </button>
@@ -515,9 +549,11 @@ export function App() {
           outputStore={outputStore}
           streamingChunks={streamingChunks}
           toolEvents={toolEvents}
+          availableModels={availableModels}
           onChange={setConfig}
           onRetryTask={(taskId) => retryTask(taskId, config)}
           onToast={addToast}
+          onOpenSettings={() => setShowSettings(true)}
         />
       )}
 
@@ -649,12 +685,21 @@ export function App() {
                 <span>{t('shortcuts.title')}</span>
               </div>
               <div className="shortcuts-modal__row">
+                <div className="shortcuts-modal__keys"><kbd>Ctrl</kbd>+<kbd>,</kbd></div>
+                <span>Open Settings</span>
+              </div>
+              <div className="shortcuts-modal__row">
                 <div className="shortcuts-modal__keys"><kbd>Esc</kbd></div>
                 <span>{t('shortcuts.close')}</span>
               </div>
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Settings modal ───────────────────── */}
+      {showSettings && (
+        <SettingsModal onClose={() => setShowSettings(false)} />
       )}
 
       {/* ── Toast notifications ─────────────── */}

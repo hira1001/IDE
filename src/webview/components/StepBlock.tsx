@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { v4 as uuidv4 } from 'uuid';
 import { WorkflowStep, WorkflowConfig, TaskState, Agent, Task } from '../../types/index.js';
 import { AgentCard } from './AgentCard.js';
+import { AvailableModels } from '../hooks/useWorkflowState.js';
 
 interface StepBlockProps {
   step: WorkflowStep;
@@ -14,10 +15,12 @@ interface StepBlockProps {
   streamingChunks?: Record<string, string>;
   /** Tool call events per task_id for agentic tasks. */
   toolEvents?: Record<string, Array<{ event_type: string; tool_name?: string; content?: string; iteration?: number }>>;
+  availableModels?: AvailableModels;
   onUpdateStep: (step: WorkflowStep) => void;
   onDeleteStep: () => void;
   onRetryTask: (taskId: string) => void;
   onToast?: (message: string, type: 'success' | 'error' | 'info') => void;
+  onOpenSettings?: () => void;
 }
 
 const STEP_TYPE_LABELS: Record<WorkflowStep['type'], string> = {
@@ -26,7 +29,7 @@ const STEP_TYPE_LABELS: Record<WorkflowStep['type'], string> = {
 
 export function StepBlock({
   step, stepIndex, config, taskStates, outputStore, streamingChunks, toolEvents,
-  onUpdateStep, onDeleteStep, onRetryTask, onToast,
+  availableModels, onUpdateStep, onDeleteStep, onRetryTask, onToast, onOpenSettings,
 }: StepBlockProps) {
   const { t } = useTranslation();
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -267,11 +270,13 @@ export function StepBlock({
               streamingOutput={streamingChunks?.[task.task_id]}
               toolEvents={toolEvents?.[task.task_id]}
               config={config}
+              availableModels={availableModels}
               onUpdateAgent={(a) => updateAgent(agent.id, a)}
               onUpdateTask={(t) => updateTask(task.task_id, t)}
               onRetry={() => onRetryTask(task.task_id)}
               onDelete={() => deleteTask(task.task_id)}
               onToast={onToast}
+              onOpenSettings={onOpenSettings}
               taskIndex={taskIndex}
               isDragOver={dragOverIndex === taskIndex}
               onDragStart={handleDragStart}

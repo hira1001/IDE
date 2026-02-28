@@ -4,30 +4,16 @@ import { Agent, Task, TaskState, OutputFormat, LLMModel, WorkflowConfig, InputSo
 import { useVSCode } from '../hooks/useVSCode.js';
 import { useAutoResize } from '../hooks/useAutoResize.js';
 import { ToolCallLog, ToolEvent } from './ToolCallLog.js';
+import { AvailableModels } from '../hooks/useWorkflowState.js';
 
 const ALL_AGENT_TOOLS = [
   'read_file', 'write_file', 'edit_file', 'list_files',
   'search_code', 'get_diagnostics', 'get_definition', 'find_references', 'run_terminal',
 ] as const;
 
-const LLM_MODEL_GROUPS: { label: string; models: LLMModel[] }[] = [
-  {
-    label: 'OpenAI',
-    models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo'],
-  },
-  {
-    label: 'Anthropic',
-    models: ['claude-sonnet-4-5', 'claude-haiku-4-5', 'claude-opus-4-5'],
-  },
-  {
-    label: 'Google',
-    models: ['gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-2.0-flash'],
-  },
-  {
-    label: 'Local (Ollama)',
-    models: ['ollama:llama3.2', 'ollama:llama3.1', 'ollama:mistral', 'ollama:deepseek-coder', 'ollama:qwen2.5', 'ollama:gemma2'],
-  },
-];
+const EMPTY_AVAILABLE_MODELS: AvailableModels = {
+  openai: [], anthropic: [], google: [], ollama: [], vscodeLM: [],
+};
 const OUTPUT_FORMATS: OutputFormat[] = ['Markdown', 'Mermaid', 'JSON', 'PlainText', 'Code'];
 
 const STATUS_FALLBACK: Record<string, string> = {
@@ -52,6 +38,7 @@ interface AgentCardProps {
   /** Tool call events for agentic tasks (shown while status === 'tool_calling'). */
   toolEvents?: ToolEvent[];
   config?: WorkflowConfig;
+  availableModels?: AvailableModels;
   onUpdateAgent: (agent: Agent) => void;
   onUpdateTask: (task: Task) => void;
   onRetry: () => void;
@@ -65,13 +52,16 @@ interface AgentCardProps {
   onDragEnd?: () => void;
   // Toast callback for clipboard feedback
   onToast?: (message: string, type: 'success' | 'error' | 'info') => void;
+  // Settings callback
+  onOpenSettings?: () => void;
 }
 
 export function AgentCard({
   agent, task, taskState, output, streamingOutput, toolEvents, config,
+  availableModels,
   onUpdateAgent, onUpdateTask, onRetry, onDelete,
   taskIndex, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd,
-  onToast,
+  onToast, onOpenSettings,
 }: AgentCardProps) {
   const { t } = useTranslation();
   const { postMessage } = useVSCode();
@@ -81,7 +71,7 @@ export function AgentCard({
   const [elapsed, setElapsed] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const streamingRef = useRef<HTMLDivElement>(null);
-  const [vscodeLMModels, setVscodeLMModels] = useState<string[]>([]);
+  const [useCustomModel, setUseCustomModel] = useState(false);
 
   // Fullscreen instruction modal
   const [showInstructionModal, setShowInstructionModal] = useState(false);
@@ -134,6 +124,26 @@ export function AgentCard({
     return () => document.removeEventListener('keydown', handleEscape);
   }, [showOutputModal, showInstructionModal, showDraftPanel]);
 
+  // Resolve effective available models (from props or fallback to empty)
+  const effectiveAvailableModels = availableModels ?? EMPTY_AVAILABLE_MODELS;
+
+  // Build grouped model list from available models prop
+  const groupedModels = useMemo(() => {
+    const m = effectiveAvailableModels;
+    const groups: { label: string; models: string[] }[] = [];
+    if (m.openai.length)    groups.push({ label: 'OpenAI',       models: m.openai });
+    if (m.anthropic.length) groups.push({ label: 'Anthropic',    models: m.anthropic });
+    if (m.google.length)    groups.push({ label: 'Google AI',    models: m.google });
+    if (m.ollama.length)    groups.push({ label: 'Local (Ollama)', models: m.ollama });
+    if (m.vscodeLM.length)  groups.push({ label: 'VS Code LM',   models: m.vscodeLM });
+    return groups;
+  }, [effectiveAvailableModels]);
+
+  const allAvailableModelsList = useMemo(
+    () => groupedModels.flatMap((g) => g.models),
+    [groupedModels]
+  );
+
   // Detect duplicate output_key within the workflow
   const isDuplicateOutputKey = useMemo(() => {
     if (!config || !task.output_key) return false;
@@ -146,25 +156,6 @@ export function AgentCard({
   useEffect(() => {
     if (status === 'error') setExpanded(true);
   }, [status]);
-
-  // Fetch VS Code LM models once on mount (5s timeout in case host never responds)
-  useEffect(() => {
-    // Set timer BEFORE postMessage to avoid a race where the host responds
-    // synchronously before the timer variable is assigned.
-    const timer = setTimeout(() => window.removeEventListener('message', handler), 5000);
-    const handler = (event: MessageEvent) => {
-      const msg = event.data as { type: string; payload?: unknown };
-      if (msg.type !== 'lm:models_list') return;
-      clearTimeout(timer);
-      const p = msg.payload as { models: string[] };
-      setVscodeLMModels(p.models ?? []);
-      window.removeEventListener('message', handler);
-    };
-    window.addEventListener('message', handler);
-    postMessage({ type: 'lm:models_list' });
-    return () => { clearTimeout(timer); window.removeEventListener('message', handler); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Listen for "Draft with AI" response from the extension host
   useEffect(() => {
@@ -537,22 +528,69 @@ export function AgentCard({
               </div>
             </div>
 
-            {/* Model — combobox: select from presets or type a custom name */}
+            {/* Model — dynamic grouped select or custom text input */}
             <div className="field-group">
               <label className="field-label">{t('card.model')}</label>
-              <input
-                className="field-input"
-                list={`model-list-${task.task_id}`}
-                value={agent.model}
-                onChange={(e) => onUpdateAgent({ ...agent, model: e.target.value })}
-                placeholder="Select or type a model (e.g. ollama:phi3, ollama:llama3.3)"
-              />
-              <datalist id={`model-list-${task.task_id}`}>
-                {LLM_MODEL_GROUPS.flatMap((group) =>
-                  group.models.map((m) => <option key={m} value={m}>{group.label} — {m}</option>)
-                )}
-                {vscodeLMModels.map((m) => <option key={m} value={m}>VS Code LM — {m}</option>)}
-              </datalist>
+              {useCustomModel ? (
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <input
+                    className="field-input"
+                    style={{ flex: 1 }}
+                    value={agent.model}
+                    onChange={(e) => onUpdateAgent({ ...agent, model: e.target.value })}
+                    placeholder="e.g. ollama:llama3.2, vscode:gpt-4o"
+                    autoFocus
+                  />
+                  <button
+                    className="btn btn--ghost btn--xs"
+                    onClick={() => setUseCustomModel(false)}
+                    title="Back to list"
+                  >← List</button>
+                </div>
+              ) : allAvailableModelsList.length > 0 ? (
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <select
+                    className="field-select"
+                    style={{ flex: 1 }}
+                    value={allAvailableModelsList.includes(agent.model) ? agent.model : '__custom__'}
+                    onChange={(e) => {
+                      if (e.target.value === '__custom__') {
+                        setUseCustomModel(true);
+                        return;
+                      }
+                      onUpdateAgent({ ...agent, model: e.target.value as LLMModel });
+                    }}
+                  >
+                    {groupedModels.map((g) => (
+                      <optgroup key={g.label} label={g.label}>
+                        {g.models.map((m) => (
+                          <option key={m} value={m}>{m}</option>
+                        ))}
+                      </optgroup>
+                    ))}
+                    <option value="__custom__">Custom model name…</option>
+                  </select>
+                </div>
+              ) : (
+                <div>
+                  <input
+                    className="field-input field-input--disabled"
+                    value=""
+                    disabled
+                    placeholder="No models available — configure API keys"
+                  />
+                  <div className="field-warning">
+                    ⚠ No models configured.{' '}
+                    {onOpenSettings ? (
+                      <button className="btn-link" onClick={onOpenSettings}>
+                        Open ⚙ Settings to add API keys
+                      </button>
+                    ) : (
+                      'Open Settings to add API keys.'
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Handover toggle */}

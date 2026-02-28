@@ -32,8 +32,8 @@
     "showMore": "Show more",
     "showLess": "Show less",
     "retry": "Retry",
-    "noApiKeysMsg": "No API key configured. Run \"AI Agent: Configure API Keys\" to get started.",
-    "configureKeys": "Configure"
+    "noApiKeysMsg": "No API key configured. Click ⚙ Settings to add your API keys.",
+    "configureKeys": "Open Settings"
   },
   "step": {
     "parallel": "Parallel",

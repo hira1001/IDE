@@ -32,8 +32,8 @@
     "showMore": "もっと見る",
     "showLess": "折りたたむ",
     "retry": "再試行",
-    "noApiKeysMsg": "APIキーが設定されていません。「AI Agent: Configure API Keys」を実行してください。",
-    "configureKeys": "設定する"
+    "noApiKeysMsg": "APIキーが設定されていません。⚙ 設定を開いてAPIキーを追加してください。",
+    "configureKeys": "設定を開く"
   },
   "step": {
     "parallel": "並列",

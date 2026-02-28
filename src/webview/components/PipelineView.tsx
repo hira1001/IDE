@@ -2,6 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { WorkflowConfig, WorkflowStep, TaskState, Agent } from '../../types/index.js';
 import { StepBlock } from './StepBlock.js';
+import { AvailableModels } from '../hooks/useWorkflowState.js';
 
 interface PipelineViewProps {
   config: WorkflowConfig;
@@ -9,9 +10,11 @@ interface PipelineViewProps {
   outputStore: Record<string, string>;
   streamingChunks?: Record<string, string>;
   toolEvents?: Record<string, Array<{ event_type: string; tool_name?: string; content?: string; iteration?: number }>>;
+  availableModels?: AvailableModels;
   onChange: (config: WorkflowConfig) => void;
   onRetryTask: (taskId: string) => void;
   onToast?: (message: string, type: 'success' | 'error' | 'info') => void;
+  onOpenSettings?: () => void;
 }
 
 export function PipelineView({
@@ -20,9 +23,11 @@ export function PipelineView({
   outputStore,
   streamingChunks,
   toolEvents,
+  availableModels,
   onChange,
   onRetryTask,
   onToast,
+  onOpenSettings,
 }: PipelineViewProps) {
   const { t } = useTranslation();
 
@@ -79,10 +84,12 @@ export function PipelineView({
             outputStore={outputStore}
             streamingChunks={streamingChunks}
             toolEvents={toolEvents}
+            availableModels={availableModels}
             onUpdateStep={(updatedStep) => updateStep(idx, updatedStep)}
             onDeleteStep={() => deleteStep(idx)}
             onRetryTask={onRetryTask}
             onToast={onToast}
+            onOpenSettings={onOpenSettings}
           />
 
           {/* Connector arrow */}

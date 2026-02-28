@@ -373,7 +373,19 @@ export type WebviewMessageType =
   | 'tool:confirm'
   | 'tool:confirm_result'
   | 'lm:models_list'
-  | 'webview:ready';
+  | 'webview:ready'
+  | 'settings:get'
+  | 'settings:save'
+  | 'settings:clear'
+  | 'settings:save_ollama'
+  | 'settings:test_ollama'
+  | 'settings:save_default_model'
+  | 'settings:current'
+  | 'settings:saved'
+  | 'settings:ollama_result'
+  | 'command:resetState'
+  | 'command:configureApiKeys'
+  | 'onboarding:no_api_keys';
 
 export interface WebviewMessage {
   type: WebviewMessageType;
