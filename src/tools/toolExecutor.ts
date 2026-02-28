@@ -146,7 +146,11 @@ export class ToolExecutor {
       const fs = await import('fs');
       const path = await import('path');
       for (const change of tracker.getChanges()) {
-        const absPath = path.join(workspaceRoot, change.path);
+        const abs = path.resolve(workspaceRoot, change.path);
+        if (path.relative(workspaceRoot, abs).startsWith('..') || path.isAbsolute(path.relative(workspaceRoot, abs))) {
+          throw new Error(`Path traversal not allowed in commitChanges: "${change.path}"`);
+        }
+        const absPath = abs;
         const dir = path.dirname(absPath);
         fs.mkdirSync(dir, { recursive: true });
         fs.writeFileSync(absPath, change.newContent, 'utf8');

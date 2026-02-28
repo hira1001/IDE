@@ -38,11 +38,13 @@ export class VscodeLMAdapter implements LLMGateway {
       ? this.buildMessagesWithTools(request)
       : this.buildMessages(request);
 
-    // Send request
+    // Send request — store the token source so abort() can cancel it
+    const tokenSource = new this.vscode.CancellationTokenSource();
+    this.currentRequest = tokenSource;
     const responseStream = await model.sendRequest(
       messages,
       {},
-      new this.vscode.CancellationTokenSource().token
+      tokenSource.token
     );
 
     if (this.aborted) throw new Error('Aborted');
@@ -245,7 +247,7 @@ function parseToolCallsFromText(text: string): ToolCall[] | undefined {
         arguments: parsed.arguments ?? {},
       });
     } catch {
-      // Skip malformed blocks
+      console.warn(`[VscodeLMAdapter] Skipped malformed <tool_call> block: ${match[1].slice(0, 100)}`);
     }
   }
   return toolCalls.length > 0 ? toolCalls : undefined;

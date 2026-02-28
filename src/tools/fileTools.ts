@@ -4,12 +4,26 @@ import { glob } from './searchTools.js';
 import { FileChangeTracker } from './fileChangeTracker.js';
 
 /**
+ * Resolve a workspace-relative path to an absolute path and verify it stays
+ * within the workspace root. Throws if the resolved path would escape the root
+ * (path traversal attack prevention).
+ */
+function resolveWithinWorkspace(filePath: string, workspaceRoot: string): string {
+  const abs = path.resolve(workspaceRoot, filePath);
+  const rel = path.relative(workspaceRoot, abs);
+  if (rel.startsWith('..') || path.isAbsolute(rel)) {
+    throw new Error(`Path traversal not allowed: "${filePath}"`);
+  }
+  return abs;
+}
+
+/**
  * Read a file at the given workspace-relative path.
  * Returns the file content as a UTF-8 string.
  * Throws with a descriptive message if the file does not exist.
  */
 export function readFile(filePath: string, workspaceRoot: string): string {
-  const absPath = path.join(workspaceRoot, filePath);
+  const absPath = resolveWithinWorkspace(filePath, workspaceRoot);
   if (!fs.existsSync(absPath)) {
     throw new Error(`File not found: ${filePath}`);
   }
@@ -27,7 +41,7 @@ export function writeFile(
   workspaceRoot: string,
   tracker: FileChangeTracker
 ): string {
-  const absPath = path.join(workspaceRoot, filePath);
+  const absPath = resolveWithinWorkspace(filePath, workspaceRoot);
   const originalContent = fs.existsSync(absPath)
     ? fs.readFileSync(absPath, 'utf8')
     : '';
@@ -70,7 +84,7 @@ export function editFile(
   }
 
   const newContent = currentContent.replace(oldStr, newStr);
-  const absPath = path.join(workspaceRoot, filePath);
+  const absPath = resolveWithinWorkspace(filePath, workspaceRoot);
   const originalContent = staged?.originalContent ?? (
     fs.existsSync(absPath) ? fs.readFileSync(absPath, 'utf8') : ''
   );

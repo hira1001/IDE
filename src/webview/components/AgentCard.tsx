@@ -147,17 +147,20 @@ export function AgentCard({
     if (status === 'error') setExpanded(true);
   }, [status]);
 
-  // Fetch VS Code LM models once on mount
+  // Fetch VS Code LM models once on mount (5s timeout in case host never responds)
   useEffect(() => {
     const handler = (event: MessageEvent) => {
       const msg = event.data as { type: string; payload?: unknown };
       if (msg.type !== 'lm:models_list') return;
+      clearTimeout(timer);
       const p = msg.payload as { models: string[] };
       setVscodeLMModels(p.models ?? []);
+      window.removeEventListener('message', handler);
     };
     window.addEventListener('message', handler);
     postMessage({ type: 'lm:models_list' });
-    return () => window.removeEventListener('message', handler);
+    const timer = setTimeout(() => window.removeEventListener('message', handler), 5000);
+    return () => { clearTimeout(timer); window.removeEventListener('message', handler); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

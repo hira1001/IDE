@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { randomBytes } from 'crypto';
 import { Orchestrator } from './orchestrator/orchestrator.js';
 import { DryRunner } from './orchestrator/dryRunner.js';
 import { validateWorkflow } from './orchestrator/validator.js';
@@ -70,10 +71,19 @@ export function activate(context: vscode.ExtensionContext): void {
           vscode.window.showErrorMessage('aiAgentOrchestrator.runPrompt: "prompt" argument is required.');
           return undefined;
         }
+        if (args.prompt.length > 50_000) {
+          vscode.window.showErrorMessage('aiAgentOrchestrator.runPrompt: prompt exceeds 50,000 character limit.');
+          return undefined;
+        }
+        const VALID_PREFIXES = ['gpt-', 'claude-', 'gemini-', 'ollama:', 'vscode:'];
+        const model = args.model ?? 'gpt-4o';
+        if (!VALID_PREFIXES.some((p) => model.startsWith(p))) {
+          vscode.window.showErrorMessage(`aiAgentOrchestrator.runPrompt: unknown model prefix for "${model}".`);
+          return undefined;
+        }
         const apiKeys = await getApiKeys(context);
         const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
         const vscodeLM = vscode as unknown as VscodeLMApi;
-        const model = args.model ?? 'gpt-4o';
 
         const singleTaskConfig: WorkflowConfig = {
           agents: [{
@@ -628,11 +638,14 @@ async function safeSecretsGet(context: vscode.ExtensionContext, key: string): Pr
 async function safeSecretsStore(context: vscode.ExtensionContext, key: string, value: string): Promise<void> {
   try {
     await context.secrets.store(key, value);
-    // Remove from fallback if successfully stored in SecretStorage
+    // Clean up any old plaintext fallback entry
     await context.globalState.update(FALLBACK_SECRET_PREFIX + key, undefined);
   } catch (err) {
-    console.warn(`[Extension] SecretStorage store failed for ${key}, using fallback`, err);
-    await context.globalState.update(FALLBACK_SECRET_PREFIX + key, value);
+    console.error(`[Extension] SecretStorage store failed for ${key}`, err);
+    vscode.window.showWarningMessage(
+      'AI Agent Orchestrator: Failed to store API key securely. Please re-enter your key in the settings.'
+    );
+    throw err;
   }
 }
 
@@ -747,10 +760,5 @@ function getWebviewHtml(context: vscode.ExtensionContext, webview: vscode.Webvie
 }
 
 function generateNonce(): string {
-  let text = '';
-  const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  for (let i = 0; i < 32; i++) {
-    text += possible.charAt(Math.floor(Math.random() * possible.length));
-  }
-  return text;
+  return randomBytes(16).toString('base64');
 }
