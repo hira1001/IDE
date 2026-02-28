@@ -398,4 +398,60 @@ describe('TemplateManager', () => {
       await expect(manager.delete(vscode.Uri.file('/nonexistent/file.json'))).rejects.toThrow();
     });
   });
+
+  // ─── deleteById() ──────────────────────────────────────────────────────────
+
+  describe('deleteById()', () => {
+    it('returns true and removes the file when template exists in workspace scope', async () => {
+      const saved = await manager.save({ name: 'ByIdTest', description: '', tags: [], config: MINIMAL_CONFIG });
+      const templateDir = path.join(tmpDir, 'workspace', '.vscode', 'aao-templates');
+
+      const result = await manager.deleteById(saved.template_id);
+
+      expect(result).toBe(true);
+      const remaining = await fs.readdir(templateDir);
+      expect(remaining).toHaveLength(0);
+    });
+
+    it('returns true and removes the file when template exists in global scope', async () => {
+      const saved = await manager.save({
+        name: 'GlobalById', description: '', tags: [], config: MINIMAL_CONFIG, scope: 'global',
+      });
+      const globalDir = path.join(tmpDir, 'global-storage', 'templates');
+
+      const result = await manager.deleteById(saved.template_id);
+
+      expect(result).toBe(true);
+      const remaining = await fs.readdir(globalDir);
+      expect(remaining).toHaveLength(0);
+    });
+
+    it('returns false when template_id does not match any file', async () => {
+      await manager.save({ name: 'Irrelevant', description: '', tags: [], config: MINIMAL_CONFIG });
+
+      const result = await manager.deleteById('nonexistent-id-00000000-0000-0000-0000-000000000000');
+
+      expect(result).toBe(false);
+    });
+
+    it('returns false gracefully when no template directory exists', async () => {
+      // No templates saved, directories do not exist
+      const result = await manager.deleteById('any-id');
+      expect(result).toBe(false);
+    });
+
+    it('only deletes the matching template, leaving others intact', async () => {
+      const t1 = await manager.save({ name: 'Keep', description: '', tags: [], config: MINIMAL_CONFIG });
+      const t2 = await manager.save({ name: 'Remove', description: '', tags: [], config: MINIMAL_CONFIG });
+      const templateDir = path.join(tmpDir, 'workspace', '.vscode', 'aao-templates');
+
+      await manager.deleteById(t2.template_id);
+
+      const remaining = await fs.readdir(templateDir);
+      expect(remaining).toHaveLength(1);
+      const raw = await fs.readFile(path.join(templateDir, remaining[0]), 'utf-8');
+      const parsed = JSON.parse(raw);
+      expect(parsed.template_id).toBe(t1.template_id);
+    });
+  });
 });

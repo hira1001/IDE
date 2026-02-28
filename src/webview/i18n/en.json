@@ -26,7 +26,8 @@
     "keyboardShortcuts": "Keyboard Shortcuts",
     "aborted": "Workflow aborted",
     "templateSaved": "Template saved",
-    "copied": "Copied to clipboard"
+    "copied": "Copied to clipboard",
+    "clearWorkflow": "Clear workflow"
   },
   "step": {
     "parallel": "Parallel",

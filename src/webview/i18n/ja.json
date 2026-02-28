@@ -26,7 +26,8 @@
     "keyboardShortcuts": "キーボードショートカット",
     "aborted": "ワークフローを中断しました",
     "templateSaved": "テンプレートを保存しました",
-    "copied": "クリップボードにコピーしました"
+    "copied": "クリップボードにコピーしました",
+    "clearWorkflow": "ワークフローをクリア"
   },
   "step": {
     "parallel": "並列",
