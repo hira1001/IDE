@@ -126,6 +126,7 @@ export function App() {
     executeWorkflow,
     executeFromStep,
     abortWorkflow,
+    abortGenerate,
     retryTask,
     resumeFromPause,
     dryRun,
@@ -153,6 +154,7 @@ export function App() {
     el.style.height = `${Math.max(el.scrollHeight, lineHeight * 2 + 20)}px`;
   }, [instruction]);
 
+  const [errorExpanded, setErrorExpanded] = useState(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [showTemplateSelector, setShowTemplateSelector] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
@@ -426,25 +428,47 @@ export function App() {
               <span /><span /><span />
             </div>
             <span className="generating-indicator__text">{t('app.generating') || 'Generating workflow…'}</span>
-          </div>
-        )}
-
-        {generationError && (
-          <div className="error-message" role="alert">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-              <circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.3"/>
-              <path d="M7 4.5v3M7 9.5v.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-            </svg>
-            {generationError}
             <button
               className="btn btn--ghost btn--xs"
-              onClick={handleGenerate}
-              style={{ marginLeft: 8 }}
+              onClick={abortGenerate}
+              style={{ marginLeft: 'auto' }}
+              aria-label={t('app.cancelGeneration') || 'Cancel'}
             >
-              Retry
+              {t('app.cancelGeneration') || 'Cancel'}
             </button>
           </div>
         )}
+
+        {generationError && (() => {
+          const MAX_LEN = 200;
+          const truncated = !errorExpanded && generationError.length > MAX_LEN;
+          const displayError = truncated ? generationError.slice(0, MAX_LEN) + '…' : generationError;
+          return (
+            <div className="error-message" role="alert">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                <circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.3"/>
+                <path d="M7 4.5v3M7 9.5v.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+              </svg>
+              <span>{displayError}</span>
+              {generationError.length > MAX_LEN && (
+                <button
+                  className="btn btn--ghost btn--xs"
+                  onClick={() => setErrorExpanded((v) => !v)}
+                  style={{ marginLeft: 4 }}
+                >
+                  {errorExpanded ? (t('app.showLess') || 'Show less') : (t('app.showMore') || 'Show more')}
+                </button>
+              )}
+              <button
+                className="btn btn--ghost btn--xs"
+                onClick={handleGenerate}
+                style={{ marginLeft: 8 }}
+              >
+                {t('app.retry') || 'Retry'}
+              </button>
+            </div>
+          );
+        })()}
       </div>
 
       {/* ── Context indicator ───────────────────── */}

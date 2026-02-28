@@ -1,7 +1,7 @@
 {
   "app": {
     "title": "AI Agent Orchestrator",
-    "chatPlaceholder": "AIチームを構成する指示を入力... (例: 記事を書いてレビューするフローを作って)",
+    "chatPlaceholder": "例: 「認証付きREST APIを設計・実装・テストして」「このファイルのTypeScriptエラーを全部直して」",
     "sourceIndicator": "入力ソース",
     "noSource": "アクティブなファイルがありません。入力として使用するファイルをエディタで開いてください。",
     "addStep": "+ ステップを追加",
@@ -27,7 +27,11 @@
     "aborted": "ワークフローを中断しました",
     "templateSaved": "テンプレートを保存しました",
     "copied": "クリップボードにコピーしました",
-    "clearWorkflow": "ワークフローをクリア"
+    "clearWorkflow": "ワークフローをクリア",
+    "cancelGeneration": "キャンセル",
+    "showMore": "もっと見る",
+    "showLess": "折りたたむ",
+    "retry": "再試行"
   },
   "step": {
     "parallel": "並列",

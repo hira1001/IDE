@@ -1,7 +1,7 @@
 {
   "app": {
     "title": "AI Agent Orchestrator",
-    "chatPlaceholder": "Describe the AI team you want to build... (e.g. Draft an article then review it)",
+    "chatPlaceholder": "e.g. \"Build a REST API with auth, tests, and docs\" or \"Review this file and fix all TypeScript errors\"",
     "sourceIndicator": "Input source",
     "noSource": "No active file. Open a file in the editor to use as input.",
     "addStep": "+ Add Step",
@@ -27,7 +27,11 @@
     "aborted": "Workflow aborted",
     "templateSaved": "Template saved",
     "copied": "Copied to clipboard",
-    "clearWorkflow": "Clear workflow"
+    "clearWorkflow": "Clear workflow",
+    "cancelGeneration": "Cancel",
+    "showMore": "Show more",
+    "showLess": "Show less",
+    "retry": "Retry"
   },
   "step": {
     "parallel": "Parallel",

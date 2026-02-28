@@ -1,36 +1,48 @@
 import { WorkflowConfig, LLMModel, SourceInput } from '../types/index.js';
 import { getGateway, ApiKeys } from '../llm/gateway.js';
 
-const META_AI_SYSTEM_PROMPT_TEMPLATE = `あなたは優秀なプロジェクトマネージャーであり、AIエージェントのオーケストレーターです。ユーザーからの曖昧な依頼を分析し、各AIエージェントが迷いなく実行できるレベルの具体的な作業手順に分解・構造化してください。
+const META_AI_SYSTEM_PROMPT_TEMPLATE = `You are an expert AI project manager and orchestrator. \
+Analyze the user's request and decompose it into concrete, independently executable tasks \
+for a team of AI agents. Each task must be specific enough that an agent can execute it without \
+asking follow-up questions.
 
-【コンテキスト】
-- 処理対象ファイル: {{filename}}
-- ファイルの種類: {{language_id}}
-- ファイルの行数: {{line_count}}
+CONTEXT (active file in editor):
+- Filename: {{filename}}
+- Language: {{language_id}}
+- Lines: {{line_count}}
 
-【ルール】
-1. instructions（具体的な作業ステップ）を3〜5項目にブレイクダウン
-2. constraints（制約事項や禁止事項）を必ず設定
-3. output_format（出力形式）を明確に指定
-4. 依存関係のないタスクは parallel に、依存があるものは sequential に
-5. レビュー→修正のパターンには conditional ステップを使用
-6. 各タスクの input_mapping と output_key を明示的に指定すること
-7. 重要な中間確認が必要なステップには pause_after: true を設定
+DECOMPOSITION RULES:
+1. Break each task's instructions into 3–5 concrete, verb-first steps (e.g. "Analyze X", "Write Y", "Review Z").
+2. Choose task types carefully:
+   - "parallel": tasks with NO dependencies on each other (can run simultaneously)
+   - "sequential": tasks where each depends on the previous step's output
+   - "conditional": review→revise loops where a later step may loop back
+3. Every task MUST have a unique output_key (snake_case, e.g. "api_spec", "test_suite").
+4. Use input_mapping to wire outputs between steps:
+   - from_step: 0, from_agent_id: "__source__" → the active file content (always available)
+   - from_step: N, from_agent_id: "agent_XXX" → the output_key produced by that agent in step N
+   - Tasks in step 2 that depend on step 1 output MUST use "sequential" type.
+5. Set pause_after: true only for steps requiring human review before continuing.
+6. Assign the most appropriate model per agent:
+   - Complex reasoning / architecture → gpt-4o or claude-sonnet-4-5
+   - Fast iteration / summaries → gpt-4o-mini or claude-haiku-4-5
+   - Long-context tasks → gemini-1.5-pro
+7. Every agent must have a clear persona describing their specialty.
 
-【利用可能なモデル】
+AVAILABLE MODELS:
 - OpenAI: gpt-4o, gpt-4o-mini, gpt-4-turbo
 - Anthropic: claude-sonnet-4-5, claude-haiku-4-5, claude-opus-4-5
 - Google: gemini-1.5-pro, gemini-1.5-flash, gemini-2.0-flash
 
-【出力形式】
-以下のJSONスキーマに厳密に従って出力してください。JSONのみを出力し、説明文は一切不要です。
+OUTPUT FORMAT:
+Output ONLY the JSON object below. No markdown fences, no explanation.
 
 {
   "agents": [
     {
       "id": "agent_001",
-      "name": "エージェント名",
-      "persona": "このエージェントのキャラクターや専門性の説明",
+      "name": "Agent display name",
+      "persona": "Expert description of this agent's role and specialty",
       "model": "gpt-4o"
     }
   ],
@@ -43,22 +55,40 @@ const META_AI_SYSTEM_PROMPT_TEMPLATE = `あなたは優秀なプロジェクト�
         {
           "task_id": "task_001",
           "agent_id": "agent_001",
-          "task_name": "タスク名",
-          "instructions": ["手順1", "手順2", "手順3"],
-          "constraints": ["制約1", "制約2"],
+          "task_name": "Short task name",
+          "instructions": ["Step 1: ...", "Step 2: ...", "Step 3: ..."],
+          "constraints": ["Do not ...", "Keep output under ..."],
           "output_format": "Markdown",
-          "output_key": "output_key_name",
+          "output_key": "unique_output_key",
           "input_mapping": [
-            { "from_step": 0, "from_agent_id": "__source__", "label": "元ファイル" }
+            { "from_step": 0, "from_agent_id": "__source__", "label": "Source file" }
           ],
           "enable_handover_note": false
         }
       ]
+    },
+    {
+      "step": 2,
+      "type": "sequential",
+      "pause_after": false,
+      "tasks": [
+        {
+          "task_id": "task_002",
+          "agent_id": "agent_001",
+          "task_name": "Review and improve",
+          "instructions": ["Step 1: Read the output from step 1", "Step 2: ..."],
+          "constraints": ["Preserve the original structure"],
+          "output_format": "Markdown",
+          "output_key": "reviewed_output",
+          "input_mapping": [
+            { "from_step": 1, "from_agent_id": "agent_001", "label": "Draft from step 1" }
+          ],
+          "enable_handover_note": true
+        }
+      ]
     }
   ]
-}
-
-重要: input_mapping の from_step: 0 は入力ソース（アクティブファイル）を指します。from_agent_id: "__source__" は常にアクティブファイルを参照します。`;
+}`;
 
 export class MetaAIService {
   constructor(
@@ -68,11 +98,11 @@ export class MetaAIService {
 
   async generateWorkflow(instruction: string, source: SourceInput | null): Promise<WorkflowConfig> {
     const systemPrompt = META_AI_SYSTEM_PROMPT_TEMPLATE
-      .replace('{{filename}}', source?.filename ?? '(ファイル未指定)')
+      .replace('{{filename}}', source?.filename ?? '(none)')
       .replace('{{language_id}}', source?.language_id ?? 'unknown')
       .replace('{{line_count}}', String(source?.line_count ?? 0));
 
-    const userPrompt = `以下の指示に基づいてワークフローを設計してください:\n\n${instruction}`;
+    const userPrompt = `Design a workflow for the following request:\n\n${instruction}`;
 
     const gateway = getGateway(this.model, this.apiKeys);
     const response = await gateway.chat({
@@ -80,7 +110,7 @@ export class MetaAIService {
       system_prompt: systemPrompt,
       user_prompt: userPrompt,
       max_tokens: 4096,
-      temperature: 0.3, // Lower temperature for more consistent JSON output
+      temperature: 0.2, // Very low for deterministic, valid JSON output
     });
 
     return this.parseResponse(response.content);
@@ -169,6 +199,42 @@ Output only the markdown document. No preamble. No explanation. No code fences.`
     const c = config as WorkflowConfig;
     if (!Array.isArray(c.agents) || !Array.isArray(c.workflow)) {
       throw new Error('Invalid WorkflowConfig: missing agents or workflow array.');
+    }
+
+    // Build lookup sets for richer validation
+    const agentIds = new Set(c.agents.map((a) => a.id));
+    const outputKeysSeen = new Set<string>();
+    const stepNumbers = new Set(c.workflow.map((s) => s.step));
+
+    for (const step of c.workflow) {
+      for (const task of step.tasks ?? []) {
+        // agent_id must reference a declared agent
+        if (!agentIds.has(task.agent_id)) {
+          throw new Error(
+            `Task "${task.task_id}" references unknown agent_id "${task.agent_id}". ` +
+            `Declared agents: ${[...agentIds].join(', ')}`
+          );
+        }
+        // output_key must be unique across all tasks
+        if (task.output_key) {
+          if (outputKeysSeen.has(task.output_key)) {
+            throw new Error(`Duplicate output_key "${task.output_key}" found in task "${task.task_id}".`);
+          }
+          outputKeysSeen.add(task.output_key);
+        }
+        // input_mapping from_step must point to an existing step (or 0 for source)
+        for (const mapping of task.input_mapping ?? []) {
+          if (mapping.from_step !== 0 && !stepNumbers.has(mapping.from_step)) {
+            throw new Error(
+              `Task "${task.task_id}" input_mapping references non-existent step ${mapping.from_step}.`
+            );
+          }
+        }
+        // instructions must not be empty
+        if (!Array.isArray(task.instructions) || task.instructions.length === 0) {
+          throw new Error(`Task "${task.task_id}" has no instructions.`);
+        }
+      }
     }
   }
 }

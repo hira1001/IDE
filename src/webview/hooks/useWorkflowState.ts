@@ -46,6 +46,9 @@ export function useWorkflowState() {
   const historyRef = useRef<WorkflowConfig[]>([]);
   const historyIndexRef = useRef<number>(-1);
   const [historySize, setHistorySize] = useState({ canUndo: false, canRedo: false });
+  // Tracks whether the in-flight generation should still be applied when it resolves.
+  // Avoids stale-closure issues by reading ref.current instead of state.
+  const generationActiveRef = useRef(false);
 
   // Listen for messages from Extension Host
   useEffect(() => {
@@ -68,10 +71,16 @@ export function useWorkflowState() {
         case 'workflow:generate': {
           const p = message.payload as { status: string; config?: WorkflowConfig; error?: string };
           if (p.status === 'generating') {
+            generationActiveRef.current = true;
             setState((s) => ({ ...s, isGenerating: true, generationError: null }));
           } else if (p.status === 'done' && p.config) {
-            setState((s) => ({ ...s, config: p.config!, isGenerating: false }));
+            // Ignore if the user already cancelled this generation
+            if (generationActiveRef.current) {
+              generationActiveRef.current = false;
+              setState((s) => ({ ...s, config: p.config!, isGenerating: false }));
+            }
           } else if (p.status === 'error') {
+            generationActiveRef.current = false;
             setState((s) => ({ ...s, isGenerating: false, generationError: p.error ?? 'Unknown error' }));
           }
           break;
@@ -174,6 +183,11 @@ export function useWorkflowState() {
   const abortWorkflow = useCallback(() => {
     postMessage({ type: 'workflow:abort' });
   }, [postMessage]);
+
+  const abortGenerate = useCallback(() => {
+    generationActiveRef.current = false;
+    setState((s) => ({ ...s, isGenerating: false, generationError: null }));
+  }, []);
 
   const retryTask = useCallback(
     (taskId: string, config: WorkflowConfig) => {
@@ -286,6 +300,7 @@ export function useWorkflowState() {
     executeWorkflow,
     executeFromStep,
     abortWorkflow,
+    abortGenerate,
     retryTask,
     resumeFromPause,
     dryRun,
