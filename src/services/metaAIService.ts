@@ -24,15 +24,15 @@ DECOMPOSITION RULES:
    - Tasks in step 2 that depend on step 1 output MUST use "sequential" type.
 5. Set pause_after: true only for steps requiring human review before continuing.
 6. Assign the most appropriate model per agent:
-   - Complex reasoning / architecture → gpt-4o or claude-sonnet-4-5
+   - Complex reasoning / architecture → gpt-4o or claude-sonnet-4-6
    - Fast iteration / summaries → gpt-4o-mini or claude-haiku-4-5
-   - Long-context tasks → gemini-1.5-pro
+   - Long-context tasks → gemini-1.5-pro or gemini-2.0-flash
 7. Every agent must have a clear persona describing their specialty.
 
 AVAILABLE MODELS:
-- OpenAI: gpt-4o, gpt-4o-mini, gpt-4-turbo
-- Anthropic: claude-sonnet-4-5, claude-haiku-4-5, claude-opus-4-5
-- Google: gemini-1.5-pro, gemini-1.5-flash, gemini-2.0-flash
+- OpenAI: gpt-4o, gpt-4o-mini, o3-mini
+- Anthropic: claude-opus-4-6, claude-sonnet-4-6, claude-haiku-4-5
+- Google: gemini-2.0-flash, gemini-1.5-pro, gemini-1.5-flash
 
 OUTPUT FORMAT:
 Output ONLY the JSON object below. No markdown fences, no explanation.

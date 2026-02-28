@@ -181,15 +181,13 @@ export function useWorkflowState() {
             google?: 'set' | 'unset';
             vscodeLMCount?: number;
           };
-          if (p.availableModels) {
-            setState((s) => ({ ...s, availableModels: p.availableModels! }));
-          }
-          // If all keys are now set, dismiss the no-api-keys banner
           const hasAnyKey = p.openai === 'set' || p.anthropic === 'set' || p.google === 'set';
           const hasVscodeLM = (p.vscodeLMCount ?? 0) > 0;
-          if (hasAnyKey || hasVscodeLM) {
-            setState((s) => ({ ...s, noApiKeys: false }));
-          }
+          setState((s) => ({
+            ...s,
+            ...(p.availableModels ? { availableModels: p.availableModels } : {}),
+            ...(hasAnyKey || hasVscodeLM ? { noApiKeys: false } : {}),
+          }));
           break;
         }
       }
