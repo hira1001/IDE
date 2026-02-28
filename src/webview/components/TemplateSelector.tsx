@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { WorkflowTemplate } from '../../types/index.js';
 import { useVSCode } from '../hooks/useVSCode.js';
@@ -21,6 +21,12 @@ export function TemplateSelector({ templates, onSelect, onClose }: TemplateSelec
       tpl.description.toLowerCase().includes(filter.toLowerCase()) ||
       tpl.tags.some((tag) => tag.toLowerCase().includes(filter.toLowerCase()))
   );
+
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [onClose]);
 
   const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) onClose();

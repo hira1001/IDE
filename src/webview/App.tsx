@@ -234,7 +234,11 @@ export function App() {
       e.preventDefault();
       setShowShortcuts(true);
     }
-    if (e.key === 'Escape') setShowShortcuts(false);
+    if (e.key === 'Escape') {
+      if (showShortcuts) { setShowShortcuts(false); return; }
+      if (showTemplateSelector) { setShowTemplateSelector(false); return; }
+      if (showSaveDialog) { setShowSaveDialog(false); return; }
+    }
 
     if (isEditableTarget) return;
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { WorkflowConfig } from '../../types/index.js';
 import { useVSCode } from '../hooks/useVSCode.js';
@@ -31,6 +31,12 @@ export function TemplateSaveDialog({ config, onClose, onSaved }: TemplateSaveDia
     });
     onSaved ? onSaved() : onClose();
   };
+
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [onClose]);
 
   const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) onClose();
@@ -68,6 +74,7 @@ export function TemplateSaveDialog({ config, onClose, onSaved }: TemplateSaveDia
               className="field-input"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && name.trim()) handleSave(); }}
               placeholder="My Workflow Template"
               autoFocus
             />

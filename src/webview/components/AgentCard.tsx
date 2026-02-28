@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Agent, Task, TaskState, OutputFormat, LLMModel, WorkflowConfig, InputSource } from '../../types/index.js';
 import { useVSCode } from '../hooks/useVSCode.js';
@@ -122,6 +122,14 @@ export function AgentCard({
     document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
   }, [showOutputModal, showInstructionModal, showDraftPanel]);
+
+  // Detect duplicate output_key within the workflow
+  const isDuplicateOutputKey = useMemo(() => {
+    if (!config || !task.output_key) return false;
+    const allKeys = config.workflow.flatMap((s) => s.tasks.map((t) => t.output_key));
+    const count = allKeys.filter((k) => k === task.output_key).length;
+    return count > 1;
+  }, [config, task.output_key]);
 
   // Auto-expand when task enters error state
   useEffect(() => {
@@ -474,9 +482,21 @@ export function AgentCard({
             {/* Output Key + Format (2-col) */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
               <div className="field-group">
-                <label className="field-label">{t('card.outputKey')}</label>
-                <input className="field-input" value={task.output_key}
-                  onChange={(e) => onUpdateTask({ ...task, output_key: e.target.value })} />
+                <label className="field-label">
+                  {t('card.outputKey')}
+                  {isDuplicateOutputKey && (
+                    <span
+                      className="field-label__warning"
+                      title="Duplicate output key — two tasks share this key, later results will overwrite earlier ones"
+                      aria-label="Duplicate output key warning"
+                    >⚠</span>
+                  )}
+                </label>
+                <input
+                  className={`field-input${isDuplicateOutputKey ? ' field-input--warning' : ''}`}
+                  value={task.output_key}
+                  onChange={(e) => onUpdateTask({ ...task, output_key: e.target.value })}
+                />
               </div>
               <div className="field-group">
                 <label className="field-label">{t('card.outputFormat')}</label>
