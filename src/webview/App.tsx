@@ -173,6 +173,12 @@ export function App() {
 
   // Compute completed task counts for progress bar
   const totalTasks = config ? config.workflow.reduce((acc, s) => acc + s.tasks.length, 0) : 0;
+
+  // Error display derived values
+  const ERROR_MAX_LEN = 200;
+  const errorTruncated = !errorExpanded && (generationError?.length ?? 0) > ERROR_MAX_LEN;
+  const displayError = errorTruncated ? generationError!.slice(0, ERROR_MAX_LEN) + '…' : (generationError ?? '');
+  const isAuthError = !!generationError && /auth|key|unauthorized|forbidden|api_key|invalid.*key/i.test(generationError);
   const completedTasks = Object.values(taskStates).filter(
     (ts) => ts.status === 'completed' || ts.status === 'skipped'
   ).length;
@@ -488,46 +494,40 @@ export function App() {
           </div>
         )}
 
-        {generationError && (() => {
-          const MAX_LEN = 200;
-          const truncated = !errorExpanded && generationError.length > MAX_LEN;
-          const displayError = truncated ? generationError.slice(0, MAX_LEN) + '…' : generationError;
-          const isAuthError = /auth|key|unauthorized|forbidden|api_key|invalid.*key/i.test(generationError);
-          return (
-            <div className="error-message" role="alert">
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-                <circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.3"/>
-                <path d="M7 4.5v3M7 9.5v.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-              </svg>
-              <span>{displayError}</span>
-              {generationError.length > MAX_LEN && (
-                <button
-                  className="btn btn--ghost btn--xs"
-                  onClick={() => setErrorExpanded((v) => !v)}
-                  style={{ marginLeft: 4 }}
-                >
-                  {errorExpanded ? (t('app.showLess') || 'Show less') : (t('app.showMore') || 'Show more')}
-                </button>
-              )}
-              {isAuthError && (
-                <button
-                  className="btn btn--ghost btn--xs"
-                  onClick={() => setShowSettings(true)}
-                  style={{ marginLeft: 4 }}
-                >
-                  ⚙ Check API Keys
-                </button>
-              )}
+        {generationError && (
+          <div className="error-message" role="alert">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+              <circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.3"/>
+              <path d="M7 4.5v3M7 9.5v.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+            </svg>
+            <span>{displayError}</span>
+            {generationError.length > ERROR_MAX_LEN && (
               <button
                 className="btn btn--ghost btn--xs"
-                onClick={handleGenerate}
+                onClick={() => setErrorExpanded((v) => !v)}
                 style={{ marginLeft: 4 }}
               >
-                {t('app.retry') || 'Retry'}
+                {errorExpanded ? (t('app.showLess') || 'Show less') : (t('app.showMore') || 'Show more')}
               </button>
-            </div>
-          );
-        })()}
+            )}
+            {isAuthError && (
+              <button
+                className="btn btn--ghost btn--xs"
+                onClick={() => setShowSettings(true)}
+                style={{ marginLeft: 4 }}
+              >
+                ⚙ Check API Keys
+              </button>
+            )}
+            <button
+              className="btn btn--ghost btn--xs"
+              onClick={handleGenerate}
+              style={{ marginLeft: 4 }}
+            >
+              {t('app.retry') || 'Retry'}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ── Context indicator ───────────────────── */}

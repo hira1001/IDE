@@ -186,7 +186,7 @@ export function useWorkflowState() {
           setState((s) => ({
             ...s,
             ...(p.availableModels ? { availableModels: p.availableModels } : {}),
-            ...(hasAnyKey || hasVscodeLM ? { noApiKeys: false } : {}),
+            noApiKeys: !hasAnyKey && !hasVscodeLM,
           }));
           break;
         }
