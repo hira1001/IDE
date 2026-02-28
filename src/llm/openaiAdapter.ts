@@ -15,15 +15,18 @@ export class OpenAIAdapter implements LLMGateway {
       return this._chatWithTools(request, start);
     }
 
+    // o1/o3 reasoning models: no temperature, use max_completion_tokens, developer role
+    const isReasoning = isReasoningModel(request.model);
     const body = {
       model: request.model,
       messages: [
-        { role: 'system', content: request.system_prompt },
+        { role: isReasoning ? 'developer' : 'system', content: request.system_prompt },
         { role: 'user', content: request.user_prompt },
       ],
-      max_tokens: request.max_tokens ?? 4096,
-      temperature: request.temperature ?? 0.7,
-      stream: !!request.onChunk,
+      ...(isReasoning
+        ? { max_completion_tokens: request.max_tokens ?? 16384 }
+        : { max_tokens: request.max_tokens ?? 4096, temperature: request.temperature ?? 0.7 }),
+      stream: !!request.onChunk && !isReasoning,
     };
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -61,10 +64,11 @@ export class OpenAIAdapter implements LLMGateway {
   }
 
   private async _chatWithTools(request: LLMRequest, start: number): Promise<LLMResponse> {
+    const isReasoning = isReasoningModel(request.model);
     const messages = request.conversation
-      ? conversationToOpenAI(request.conversation)
+      ? conversationToOpenAI(request.conversation, isReasoning)
       : [
-          { role: 'system', content: request.system_prompt },
+          { role: isReasoning ? 'developer' : 'system', content: request.system_prompt },
           { role: 'user', content: request.user_prompt },
         ];
 
@@ -73,8 +77,9 @@ export class OpenAIAdapter implements LLMGateway {
       messages,
       tools: request.tools!.map(toolToOpenAI),
       tool_choice: 'auto',
-      max_tokens: request.max_tokens ?? 4096,
-      temperature: request.temperature ?? 0.7,
+      ...(isReasoning
+        ? { max_completion_tokens: request.max_tokens ?? 16384 }
+        : { max_tokens: request.max_tokens ?? 4096, temperature: request.temperature ?? 0.7 }),
     };
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -188,6 +193,11 @@ export class OpenAIAdapter implements LLMGateway {
 
 // ─── format converters ────────────────────────────────────────────────────────
 
+/** o1/o3 reasoning models: no temperature, max_completion_tokens, developer role */
+function isReasoningModel(model: string): boolean {
+  return model.startsWith('o1') || model.startsWith('o3');
+}
+
 function toolToOpenAI(tool: ToolDefinition) {
   return {
     type: 'function' as const,
@@ -199,7 +209,7 @@ function toolToOpenAI(tool: ToolDefinition) {
   };
 }
 
-function conversationToOpenAI(messages: ConversationMessage[]) {
+function conversationToOpenAI(messages: ConversationMessage[], isReasoning = false) {
   return messages.map((m) => {
     if (m.role === 'tool') {
       return { role: 'tool' as const, tool_call_id: m.tool_call_id, content: m.content };
@@ -215,7 +225,9 @@ function conversationToOpenAI(messages: ConversationMessage[]) {
         })),
       };
     }
-    return { role: m.role as 'system' | 'user' | 'assistant', content: m.content };
+    // o1/o3: system prompt uses 'developer' role
+    const role = (m.role === 'system' && isReasoning) ? 'developer' : m.role;
+    return { role: role as 'system' | 'developer' | 'user' | 'assistant', content: m.content };
   });
 }
 
