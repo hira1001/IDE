@@ -1,4 +1,4 @@
-import { LLMGateway, LLMRequest, LLMResponse } from '../types/index.js';
+import { LLMGateway, LLMRequest, LLMResponse, ToolDefinition, ConversationMessage, ToolCall } from '../types/index.js';
 import { estimateTokens } from './tokenCounter.js';
 
 /**
@@ -19,6 +19,11 @@ export class OllamaAdapter implements LLMGateway {
     const modelName = request.model.startsWith('ollama:')
       ? request.model.slice('ollama:'.length)
       : request.model;
+
+    // ── Function-calling (ReAct) mode ──────────────────────────────────────
+    if (request.tools) {
+      return this._chatWithTools(request, modelName, start);
+    }
 
     const body = {
       model: modelName,
@@ -73,6 +78,84 @@ export class OllamaAdapter implements LLMGateway {
       output_tokens: data.usage?.completion_tokens ?? 0,
       model: `ollama:${data.model ?? modelName}`,
       duration_ms: Date.now() - start,
+    };
+  }
+
+  private async _chatWithTools(
+    request: LLMRequest,
+    modelName: string,
+    start: number
+  ): Promise<LLMResponse> {
+    const url = `${this.endpointBase.replace(/\/$/, '')}/v1/chat/completions`;
+
+    const messages = request.conversation
+      ? conversationToMessages(request.conversation)
+      : [
+          { role: 'system', content: request.system_prompt },
+          { role: 'user', content: request.user_prompt },
+        ];
+
+    const body = {
+      model: modelName,
+      messages,
+      tools: request.tools!.map(toolToOpenAIFormat),
+      tool_choice: 'auto',
+      max_tokens: request.max_tokens ?? 4096,
+      temperature: request.temperature ?? 0.7,
+    };
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: this.abortController.signal,
+      });
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') throw err;
+      throw new Error(
+        `Cannot connect to Ollama at ${this.endpointBase}. ` +
+        `Make sure Ollama is running (\`ollama serve\`). ` +
+        `(${err instanceof Error ? err.message : String(err)})`
+      );
+    }
+
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(`Ollama API error ${response.status}: ${err}`);
+    }
+
+    const data = await response.json() as {
+      choices: Array<{
+        message: {
+          content?: string;
+          tool_calls?: Array<{
+            id: string;
+            type: string;
+            function: { name: string; arguments: string };
+          }>;
+        };
+        finish_reason: string;
+      }>;
+      usage?: { prompt_tokens: number; completion_tokens: number };
+      model: string;
+    };
+
+    const msg = data.choices[0]?.message;
+    const toolCalls: ToolCall[] | undefined = msg?.tool_calls?.map((tc) => ({
+      id: tc.id,
+      name: tc.function.name,
+      arguments: parseJsonSafe(tc.function.arguments),
+    }));
+
+    return {
+      content: msg?.content ?? '',
+      input_tokens: data.usage?.prompt_tokens ?? 0,
+      output_tokens: data.usage?.completion_tokens ?? 0,
+      model: `ollama:${data.model ?? modelName}`,
+      duration_ms: Date.now() - start,
+      tool_calls: toolCalls?.length ? toolCalls : undefined,
     };
   }
 
@@ -134,5 +217,46 @@ export class OllamaAdapter implements LLMGateway {
 
   estimateTokens(text: string): number {
     return estimateTokens(text);
+  }
+}
+
+// ─── format converters ────────────────────────────────────────────────────────
+
+function toolToOpenAIFormat(tool: ToolDefinition) {
+  return {
+    type: 'function' as const,
+    function: {
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.parameters,
+    },
+  };
+}
+
+function conversationToMessages(messages: ConversationMessage[]) {
+  return messages.map((m) => {
+    if (m.role === 'tool') {
+      return { role: 'tool' as const, tool_call_id: m.tool_call_id, content: m.content };
+    }
+    if (m.role === 'assistant' && m.tool_calls) {
+      return {
+        role: 'assistant' as const,
+        content: m.content || null,
+        tool_calls: m.tool_calls.map((tc) => ({
+          id: tc.id,
+          type: 'function' as const,
+          function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
+        })),
+      };
+    }
+    return { role: m.role as 'system' | 'user' | 'assistant', content: m.content };
+  });
+}
+
+function parseJsonSafe(raw: string): Record<string, unknown> {
+  try {
+    return JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    return {};
   }
 }

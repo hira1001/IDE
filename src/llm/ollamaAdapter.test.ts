@@ -89,6 +89,45 @@ describe('OllamaAdapter', () => {
     ).rejects.toThrow('Ollama API error 404');
   });
 
+  it('routes tool requests through _chatWithTools and returns tool_calls', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{
+          message: {
+            content: '',
+            tool_calls: [{
+              id: 'call-1',
+              type: 'function',
+              function: { name: 'read_file', arguments: '{"path":"/foo.ts"}' },
+            }],
+          },
+          finish_reason: 'tool_calls',
+        }],
+        usage: { prompt_tokens: 20, completion_tokens: 5 },
+        model: 'llama3.1',
+      }),
+    });
+
+    const adapter = new OllamaAdapter('http://localhost:11434');
+    const response = await adapter.chat({
+      model: 'ollama:llama3.1',
+      system_prompt: 'You are helpful',
+      user_prompt: 'Read /foo.ts',
+      tools: [{ name: 'read_file', description: 'Read a file', parameters: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] } }],
+    });
+
+    expect(response.tool_calls).toHaveLength(1);
+    expect(response.tool_calls![0].name).toBe('read_file');
+    expect(response.tool_calls![0].arguments).toEqual({ path: '/foo.ts' });
+    expect(response.tool_calls![0].id).toBe('call-1');
+
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
+    expect(body.tools).toHaveLength(1);
+    expect(body.tools[0].type).toBe('function');
+    expect(body.tool_choice).toBe('auto');
+  });
+
   it('abort() aborts the request', () => {
     const adapter = new OllamaAdapter('http://localhost:11434');
     expect(() => adapter.abort()).not.toThrow();
