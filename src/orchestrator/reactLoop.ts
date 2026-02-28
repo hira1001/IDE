@@ -139,6 +139,7 @@ export class AgentLoopEngine {
         conversation.push({
           role: 'tool',
           tool_call_id: toolCall.id,
+          tool_name: toolCall.name,
           content: result,
         });
       }

@@ -260,7 +260,7 @@ export type ConversationMessage =
   | { role: 'system'; content: string }
   | { role: 'user'; content: string }
   | { role: 'assistant'; content: string; tool_calls?: ToolCall[] }
-  | { role: 'tool'; tool_call_id: string; content: string };
+  | { role: 'tool'; tool_call_id: string; tool_name?: string; content: string };
 
 /** Fired by AgentLoopEngine to report progress to the orchestrator. */
 export interface AgentLoopEvent {

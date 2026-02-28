@@ -220,10 +220,11 @@ function conversationToGoogle(messages: ConversationMessage[]) {
     if (m.role === 'system') continue; // handled via systemInstruction
 
     if (m.role === 'tool') {
-      // Tool results become functionResponse parts in a user message
+      // Tool results become functionResponse parts in a user message.
+      // Google API requires the function name (not the call ID).
       const part = {
         functionResponse: {
-          name: m.tool_call_id, // Google uses function name as ID
+          name: m.tool_name ?? m.tool_call_id,
           response: { content: m.content },
         },
       };
