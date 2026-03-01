@@ -153,9 +153,12 @@ export class StateManager {
   }
 
   getLatestHandoverNoteFor(agentId: string): HandoverNote | undefined {
-    return [...this.state.handover_notes]
-      .reverse()
-      .find((n) => n.from_agent_id === agentId);
+    for (let i = this.state.handover_notes.length - 1; i >= 0; i--) {
+      if (this.state.handover_notes[i].from_agent_id === agentId) {
+        return this.state.handover_notes[i];
+      }
+    }
+    return undefined;
   }
 
   // ─── Loop Controller ──────────────────────────────────────────────────────

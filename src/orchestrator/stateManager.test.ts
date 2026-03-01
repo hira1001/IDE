@@ -65,4 +65,38 @@ describe('StateManager', () => {
     expect(manager.getOutput('key')).toBeUndefined();
     expect(manager.getTotalCost()).toBe(0);
   });
+
+  it('stores and retrieves handover notes', () => {
+    manager.addHandoverNote({ from_agent_id: 'agent_1', from_step: 1, note: 'Check edge cases.' });
+    manager.addHandoverNote({ from_agent_id: 'agent_2', from_step: 2, note: 'Focus on performance.' });
+    const notes = manager.getHandoverNotes();
+    expect(notes).toHaveLength(2);
+    expect(notes[0].note).toBe('Check edge cases.');
+  });
+
+  it('returns latest handover note for a specific agent', () => {
+    manager.addHandoverNote({ from_agent_id: 'agent_1', from_step: 1, note: 'First note.' });
+    manager.addHandoverNote({ from_agent_id: 'agent_2', from_step: 2, note: 'Agent 2 note.' });
+    manager.addHandoverNote({ from_agent_id: 'agent_1', from_step: 3, note: 'Latest note.' });
+
+    const note = manager.getLatestHandoverNoteFor('agent_1');
+    expect(note?.note).toBe('Latest note.');
+    expect(note?.from_step).toBe(3);
+  });
+
+  it('returns undefined for getLatestHandoverNoteFor when no notes exist for agent', () => {
+    manager.addHandoverNote({ from_agent_id: 'agent_1', from_step: 1, note: 'Some note.' });
+    expect(manager.getLatestHandoverNoteFor('agent_999')).toBeUndefined();
+  });
+
+  it('caps execution log at MAX_LOG_ENTRIES', () => {
+    // Log 2001 entries — only the latest 2000 should be kept
+    for (let i = 0; i < 2001; i++) {
+      manager.log(1, `task_${i}`, 'start');
+    }
+    const log = manager.getLog();
+    expect(log.length).toBe(2000);
+    // The oldest entry (i=0) should have been evicted; latest entry is task_2000
+    expect(log[log.length - 1].task_id).toBe('task_2000');
+  });
 });
