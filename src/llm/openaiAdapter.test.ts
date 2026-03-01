@@ -163,6 +163,72 @@ describe('OpenAIAdapter', () => {
     expect(resp.tool_calls![0].arguments).toEqual({ path: 'src/a.ts' });
   });
 
+  // ─── o1/o3 reasoning models ────────────────────────────────────────────────
+
+  it('o1 model: uses developer role and max_completion_tokens instead of temperature', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: 'Reasoned answer' } }],
+        usage: { prompt_tokens: 50, completion_tokens: 200 },
+        model: 'o1',
+      }),
+    });
+
+    const adapter = new OpenAIAdapter('key');
+    await adapter.chat({ model: 'o1', system_prompt: 'You are a reasoning agent', user_prompt: 'Solve this' });
+
+    const body = JSON.parse((mockFetch.mock.calls[0][1] as RequestInit).body as string);
+    // o1/o3: first message should use 'developer' role instead of 'system'
+    expect(body.messages[0].role).toBe('developer');
+    // Should NOT have temperature
+    expect(body).not.toHaveProperty('temperature');
+    // Should have max_completion_tokens, not max_tokens
+    expect(body).toHaveProperty('max_completion_tokens');
+    expect(body).not.toHaveProperty('max_tokens');
+    // Should not stream
+    expect(body.stream).toBe(false);
+  });
+
+  it('o3-mini model: uses same reasoning model parameters as o1', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: 'Answer' } }],
+        usage: { prompt_tokens: 30, completion_tokens: 100 },
+        model: 'o3-mini',
+      }),
+    });
+
+    const adapter = new OpenAIAdapter('key');
+    await adapter.chat({ model: 'o3-mini', system_prompt: 'sys', user_prompt: 'task' });
+
+    const body = JSON.parse((mockFetch.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.messages[0].role).toBe('developer');
+    expect(body).not.toHaveProperty('temperature');
+    expect(body).toHaveProperty('max_completion_tokens');
+  });
+
+  it('gpt-4o model: uses system role and temperature (not reasoning model)', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: 'GPT answer' } }],
+        usage: { prompt_tokens: 10, completion_tokens: 20 },
+        model: 'gpt-4o',
+      }),
+    });
+
+    const adapter = new OpenAIAdapter('key');
+    await adapter.chat({ model: 'gpt-4o', system_prompt: 'sys', user_prompt: 'task' });
+
+    const body = JSON.parse((mockFetch.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.messages[0].role).toBe('system');
+    expect(body).toHaveProperty('temperature');
+    expect(body).toHaveProperty('max_tokens');
+    expect(body).not.toHaveProperty('max_completion_tokens');
+  });
+
   // ─── misc ──────────────────────────────────────────────────────────────────
 
   it('abort(): does not throw', () => {
