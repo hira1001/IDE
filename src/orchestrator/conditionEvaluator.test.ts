@@ -65,4 +65,24 @@ describe('ConditionEvaluator', () => {
     const output = '  APPROVED  \nsome extra text';
     expect(evaluator.evaluate(output, config)).toBe('pass');
   });
+
+  it('pass keyword wins when both appear in body (not first line)', () => {
+    // pass_keyword is checked before fail_keyword in full-scan fallback
+    const output = 'Summary:\nAPPROVED with minor notes, but REVISION_NEEDED for one section.';
+    expect(evaluator.evaluate(output, config)).toBe('pass');
+  });
+
+  it('returns pass for single-line output containing only the pass keyword', () => {
+    expect(evaluator.evaluate('APPROVED', config)).toBe('pass');
+  });
+
+  it('returns fail for single-line output containing only the fail keyword', () => {
+    expect(evaluator.evaluate('REVISION_NEEDED', config)).toBe('fail');
+  });
+
+  it('works with custom short keywords', () => {
+    const shortConfig = { ...config, pass_keyword: 'YES', fail_keyword: 'NO' };
+    expect(evaluator.evaluate('YES', shortConfig)).toBe('pass');
+    expect(evaluator.evaluate('NO', shortConfig)).toBe('fail');
+  });
 });

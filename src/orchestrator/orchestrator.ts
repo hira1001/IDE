@@ -100,7 +100,7 @@ export class Orchestrator {
         this.stateManager.setStatus('completed');
       }
     } catch (err) {
-      if ((err as Error).name === 'AbortError') {
+      if (err instanceof Error && err.name === 'AbortError') {
         this.stateManager.setStatus('aborted');
       } else {
         this.stateManager.setStatus('error');
@@ -171,7 +171,7 @@ export class Orchestrator {
         this.stateManager.setStatus('completed');
       }
     } catch (err) {
-      if ((err as Error).name === 'AbortError') {
+      if (err instanceof Error && err.name === 'AbortError') {
         this.stateManager.setStatus('aborted');
       } else {
         this.stateManager.setStatus('error');
@@ -429,8 +429,8 @@ export class Orchestrator {
       });
       this.stateManager.log(stepNumber, taskId, 'complete', `${response.input_tokens}in+${response.output_tokens}out tokens`);
     } catch (err) {
-      const message = (err as Error).message ?? 'Unknown error';
-      if ((err as Error).name === 'AbortError') {
+      const message = err instanceof Error ? err.message : String(err);
+      if (err instanceof Error && err.name === 'AbortError') {
         this.stateManager.setTaskStatus(taskId, 'aborted');
         this.stateManager.log(stepNumber, taskId, 'abort');
       } else {
@@ -538,15 +538,14 @@ export class Orchestrator {
 
   private waitForResume(): Promise<void> {
     return new Promise<void>((resolve) => {
-      const check = () => {
+      let timer: ReturnType<typeof setInterval>;
+      timer = setInterval(() => {
         const status = this.stateManager.getStatus();
         if (status === 'running' || status === 'aborted') {
+          clearInterval(timer);
           resolve();
-        } else {
-          setTimeout(check, 200);
         }
-      };
-      check();
+      }, 200);
     });
   }
 

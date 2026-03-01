@@ -195,6 +195,9 @@ export class StateManager {
 
   // ─── Execution Log ────────────────────────────────────────────────────────
 
+  /** Maximum number of log entries kept in memory to prevent unbounded growth. */
+  private static readonly MAX_LOG_ENTRIES = 2000;
+
   log(step: number, taskId: string, event: ExecutionLogEvent, details?: string): void {
     const entry: ExecutionLogEntry = {
       timestamp: new Date().toISOString(),
@@ -204,6 +207,9 @@ export class StateManager {
       details,
     };
     this.state.execution_log.push(entry);
+    if (this.state.execution_log.length > StateManager.MAX_LOG_ENTRIES) {
+      this.state.execution_log.splice(0, this.state.execution_log.length - StateManager.MAX_LOG_ENTRIES);
+    }
   }
 
   getLog(): ExecutionLogEntry[] {
