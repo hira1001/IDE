@@ -149,7 +149,8 @@ export class MetaAIService {
       this.validateConfig(parsed);
       return parsed;
     } catch (err) {
-      throw new Error(`MetaAI returned invalid JSON: ${(err as Error).message}\nContent: ${content.slice(0, 500)}`);
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(`MetaAI returned invalid JSON: ${msg}\nContent: ${content.slice(0, 500)}`);
     }
   }
 

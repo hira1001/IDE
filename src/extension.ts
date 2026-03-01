@@ -658,7 +658,7 @@ async function handleGenerateWorkflow(
 
     postMessage({ type: 'workflow:generate', payload: { status: 'done', config: workflowConfig } });
   } catch (err) {
-    const msg = (err as Error).message;
+    const msg = err instanceof Error ? err.message : String(err);
     vscode.window.showErrorMessage(`AI Agent: Failed to generate workflow — ${msg}`);
     postMessage({ type: 'workflow:generate', payload: { status: 'error', error: msg } });
   }

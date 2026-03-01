@@ -75,6 +75,44 @@ describe('OutputValidator', () => {
     });
   });
 
+  describe('Markdown edge cases', () => {
+    it('passes for JSON-like content that also has markdown list markers', () => {
+      // Starts with { but has markdown structure elsewhere → not bare JSON
+      const content = '{\n- item 1\n- item 2\n}';
+      expect(validator.validate(content, 'Markdown').pass).toBe(true);
+    });
+
+    it('passes for XML-like content inside a code fence', () => {
+      const content = '## Result\n```xml\n<root><item/></root>\n```';
+      expect(validator.validate(content, 'Markdown').pass).toBe(true);
+    });
+
+    it('fails for bare array JSON', () => {
+      expect(validator.validate('[1, 2, 3]', 'Markdown').pass).toBe(false);
+    });
+  });
+
+  describe('Code edge cases', () => {
+    it('passes for content in markdown code fence', () => {
+      expect(validator.validate('```python\nprint("hello")\n```', 'Code').pass).toBe(true);
+    });
+
+    it('passes for class definition', () => {
+      expect(validator.validate('class Foo extends Bar {}', 'Code').pass).toBe(true);
+    });
+
+    it('passes for Python function', () => {
+      expect(validator.validate('def greet(name):\n  return f"Hello {name}"', 'Code').pass).toBe(true);
+    });
+  });
+
+  describe('unknown format', () => {
+    it('passes for unknown format (permissive default)', () => {
+      // TypeScript: OutputFormat is typed but unknown values fall through to default
+      expect(validator.validate('anything', 'CustomFormat' as never).pass).toBe(true);
+    });
+  });
+
   describe('Handover note extraction', () => {
     it('extracts note after Japanese separator', () => {
       const content = 'Main output here.\n--- 引き継ぎメモ ---\nNote for next agent.';

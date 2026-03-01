@@ -146,7 +146,7 @@ export function validateWorkflow(
       }
     }
   } catch (err) {
-    errors.push({ type: 'error', message: `Model validation error: ${(err as Error).message}` });
+    errors.push({ type: 'error', message: `Model validation error: ${err instanceof Error ? err.message : String(err)}` });
   }
 
   // Check for logical infinite loops (cycle detection)
