@@ -11,6 +11,7 @@
     "preview": "プレビュー",
     "plan": "Plan作成",
     "planAndRun": "Plan作成＋実行",
+    "executionBarTitle": "🤖 AIを用いてワークフローを生成",
     "run": "実行",
     "stop": "停止",
     "resume": "続行",

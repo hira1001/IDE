@@ -599,23 +599,26 @@ export function App() {
 
       {/* ── Execution Bar (Action Buttons) ──────── */}
       {config && (
-        <ExecutionBar
-          status={status}
-          dryRunResult={dryRunResult}
-          totalCost={totalCost}
-          currentStep={executionState?.current_step}
-          totalSteps={config.workflow.length}
-          completedTasks={completedTasks}
-          totalTasks={totalTasks}
-          onPreview={handlePreview}
-          onRun={handleRun}
-          onStop={abortWorkflow}
-          onResume={resumeFromPause}
-          onSaveTemplate={() => setShowSaveDialog(true)}
-          onRerunFromStep={config ? (fromStep) => executeFromStep(config, fromStep) : undefined}
-          onGeneratePlan={handleGeneratePlan}
-          isGeneratingPlan={isGeneratingPlan}
-        />
+        <>
+          <div className="execution-bar__title">{t('app.executionBarTitle')}</div>
+          <ExecutionBar
+            status={status}
+            dryRunResult={dryRunResult}
+            totalCost={totalCost}
+            currentStep={executionState?.current_step}
+            totalSteps={config.workflow.length}
+            completedTasks={completedTasks}
+            totalTasks={totalTasks}
+            onPreview={handlePreview}
+            onRun={handleRun}
+            onStop={abortWorkflow}
+            onResume={resumeFromPause}
+            onSaveTemplate={() => setShowSaveDialog(true)}
+            onRerunFromStep={config ? (fromStep) => executeFromStep(config, fromStep) : undefined}
+            onGeneratePlan={handleGeneratePlan}
+            isGeneratingPlan={isGeneratingPlan}
+          />
+        </>
       )}
 
       {/* ── Pipeline ────────────────────────────── */}

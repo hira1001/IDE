@@ -88,6 +88,83 @@ Hope it helps!`;
             // Must appear verbatim — not corrupted by String.replace special patterns
             expect(callArgs.system_prompt).toContain('$component.ts');
         });
+
+        it('injects project context into system prompt when provided', async () => {
+            mockChat.mockResolvedValueOnce({ content: JSON.stringify(validConfig) });
+            await service.generateWorkflow('do something', null, 'en', {
+                mode: 'project',
+                fileTree: 'src/\n  index.ts\n  utils.ts',
+                activeFile: null,
+                relatedFiles: [],
+                meta: { name: 'my-project', primaryLanguage: 'TypeScript', framework: 'React', totalFiles: 15 },
+                tokenEstimate: 500,
+            });
+            const callArgs = mockChat.mock.calls[0][0] as { system_prompt: string };
+            expect(callArgs.system_prompt).toContain('my-project');
+            expect(callArgs.system_prompt).toContain('TypeScript');
+            expect(callArgs.system_prompt).toContain('React');
+            expect(callArgs.system_prompt).toContain('src/');
+        });
+
+        it('uses fallback text when no project context is provided', async () => {
+            mockChat.mockResolvedValueOnce({ content: JSON.stringify(validConfig) });
+            await service.generateWorkflow('do something', null, 'en');
+            const callArgs = mockChat.mock.calls[0][0] as { system_prompt: string };
+            expect(callArgs.system_prompt).toContain('(no project context available)');
+        });
+    });
+
+    describe('buildProjectContextForPrompt()', () => {
+        it('includes project metadata', () => {
+            const result = MetaAIService.buildProjectContextForPrompt({
+                mode: 'project',
+                fileTree: '',
+                activeFile: null,
+                relatedFiles: [],
+                meta: { name: 'test-app', primaryLanguage: 'Python', framework: 'Django', totalFiles: 42 },
+                tokenEstimate: 0,
+            });
+            expect(result).toContain('test-app');
+            expect(result).toContain('Python');
+            expect(result).toContain('Django');
+            expect(result).toContain('42');
+        });
+
+        it('includes file tree', () => {
+            const result = MetaAIService.buildProjectContextForPrompt({
+                mode: 'project',
+                fileTree: 'src/\n  main.py\n  models.py',
+                activeFile: null,
+                relatedFiles: [],
+                meta: { name: 'p', primaryLanguage: 'Python', totalFiles: 3 },
+                tokenEstimate: 0,
+            });
+            expect(result).toContain('File Structure:');
+            expect(result).toContain('main.py');
+        });
+
+        it('truncates related file content to 20 lines', () => {
+            const longContent = Array.from({ length: 50 }, (_, i) => `line ${i + 1}`).join('\n');
+            const result = MetaAIService.buildProjectContextForPrompt({
+                mode: 'project',
+                fileTree: '',
+                activeFile: null,
+                relatedFiles: [{
+                    relativePath: 'src/big.ts',
+                    content: longContent,
+                    language_id: 'typescript',
+                    line_count: 50,
+                    byte_size: 500,
+                    reason: 'imported',
+                }],
+                meta: { name: 'p', primaryLanguage: 'TypeScript', totalFiles: 1 },
+                tokenEstimate: 0,
+            });
+            expect(result).toContain('line 1');
+            expect(result).toContain('line 20');
+            expect(result).not.toContain('line 21');
+            expect(result).toContain('(truncated)');
+        });
     });
 
     describe('validateConfig() — enhanced semantic checks', () => {

@@ -1,4 +1,4 @@
-import { WorkflowConfig, LLMModel, SourceInput } from '../types/index.js';
+import { WorkflowConfig, LLMModel, SourceInput, ProjectContext } from '../types/index.js';
 import { getGateway, ApiKeys } from '../llm/gateway.js';
 
 const META_AI_SYSTEM_PROMPT_TEMPLATE = `You are an expert AI project manager and orchestrator. \
@@ -10,6 +10,9 @@ CONTEXT (active file in editor):
 - Filename: {{filename}}
 - Language: {{language_id}}
 - Lines: {{line_count}}
+
+PROJECT CONTEXT (workspace structure and key files):
+{{project_context}}
 
 DECOMPOSITION RULES:
 1. Break each task's instructions into 3–5 concrete, verb-first steps (e.g. "Analyze X", "Write Y", "Review Z").
@@ -111,11 +114,19 @@ export class MetaAIService {
     return lines.length > 0 ? lines.join('\n') : '- OpenAI: gpt-4o, gpt-4o-mini';
   }
 
-  async generateWorkflow(instruction: string, source: SourceInput | null, targetLanguage: string = 'en'): Promise<WorkflowConfig> {
+  async generateWorkflow(
+    instruction: string,
+    source: SourceInput | null,
+    targetLanguage: string = 'en',
+    projectContext?: ProjectContext | null
+  ): Promise<WorkflowConfig> {
     const filename = source?.filename ?? '(none)';
     const languageId = source?.language_id ?? 'unknown';
     const lineCount = String(source?.line_count ?? 0);
     const modelsSection = this.buildAvailableModelsSection();
+    const projectCtxBlock = projectContext
+      ? MetaAIService.buildProjectContextForPrompt(projectContext)
+      : '(no project context available)';
     // Use replacer functions so `$` characters in values aren't misinterpreted
     // by String.replace (e.g. `$&`, `$'`, `$n` have special meaning in replacement strings)
     const systemPrompt = META_AI_SYSTEM_PROMPT_TEMPLATE
@@ -124,7 +135,8 @@ export class MetaAIService {
       .replace('{{line_count}}', () => lineCount)
       .replace('{{available_models}}', () => modelsSection)
       .replace('{{default_model}}', () => this.model)
-      .replace('{{target_language}}', () => targetLanguage);
+      .replace('{{target_language}}', () => targetLanguage)
+      .replace('{{project_context}}', () => projectCtxBlock);
 
     const userPrompt = `Design a workflow for the following request:\n\n${instruction}`;
 
@@ -254,6 +266,47 @@ Output only the markdown document. No preamble. No explanation. No code fences.`
     });
 
     return response.content.trim();
+  }
+
+  /**
+   * Build a compact project context string for inclusion in the Meta-AI system prompt.
+   * Includes: file tree, project metadata, and headers of related files (first 20 lines each).
+   * Designed to give the AI enough understanding of the project to generate relevant workflows
+   * without consuming excessive tokens.
+   */
+  static buildProjectContextForPrompt(ctx: ProjectContext): string {
+    const parts: string[] = [];
+
+    // Project metadata
+    if (ctx.meta) {
+      parts.push(`Project: ${ctx.meta.name}`);
+      parts.push(`Primary Language: ${ctx.meta.primaryLanguage}`);
+      if (ctx.meta.framework) parts.push(`Framework: ${ctx.meta.framework}`);
+      parts.push(`Total Files: ${ctx.meta.totalFiles}`);
+      parts.push('');
+    }
+
+    // File tree (compact overview)
+    if (ctx.fileTree) {
+      parts.push('File Structure:');
+      parts.push(ctx.fileTree);
+      parts.push('');
+    }
+
+    // Related files — include only headers (first 20 lines) for token efficiency
+    if (ctx.relatedFiles && ctx.relatedFiles.length > 0) {
+      parts.push('Key Files (headers):');
+      const MAX_HEADER_LINES = 20;
+      for (const f of ctx.relatedFiles) {
+        const headerLines = f.content.split('\n').slice(0, MAX_HEADER_LINES).join('\n');
+        const truncated = f.content.split('\n').length > MAX_HEADER_LINES ? ' (truncated)' : '';
+        parts.push(`--- ${f.relativePath} [${f.language_id}]${truncated} ---`);
+        parts.push(headerLines);
+        parts.push('');
+      }
+    }
+
+    return parts.join('\n');
   }
 
   private validateConfig(config: unknown): asserts config is WorkflowConfig {

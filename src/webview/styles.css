@@ -1291,6 +1291,17 @@ body {
 }
 
 /* ─── Execution Bar ──────────────────────────────────────────────────────────── */
+.execution-bar__title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--aao-muted);
+  padding: 0 4px 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .execution-bar {
   position: relative;
   display: flex;

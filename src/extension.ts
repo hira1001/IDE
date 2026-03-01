@@ -724,7 +724,7 @@ async function handleGenerateWorkflow(
 
     const savedLang = config.get<string>('language') || 'auto';
     const targetLanguage = savedLang === 'auto' ? vscode.env.language : savedLang;
-    const workflowConfig = await metaAI.generateWorkflow(payload.instruction, source, targetLanguage);
+    const workflowConfig = await metaAI.generateWorkflow(payload.instruction, source, targetLanguage, projectCtx);
 
     postMessage({ type: 'workflow:generate', payload: { status: 'done', config: workflowConfig } });
   } catch (err) {
