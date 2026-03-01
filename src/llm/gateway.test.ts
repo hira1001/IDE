@@ -61,12 +61,32 @@ describe('getGateway', () => {
   it('throws for unknown model prefix', () => {
     expect(() => getGateway('unknown-model-xyz', {})).toThrow('Unknown model: unknown-model-xyz');
   });
+
+  it('returns OpenAIAdapter for o1 models (reasoning)', () => {
+    expect(getGateway('o1', { openai: 'key' })).toBeInstanceOf(OpenAIAdapter);
+    expect(getGateway('o1-mini', { openai: 'key' })).toBeInstanceOf(OpenAIAdapter);
+    expect(getGateway('o1-preview', { openai: 'key' })).toBeInstanceOf(OpenAIAdapter);
+  });
+
+  it('returns OpenAIAdapter for o3 models (reasoning)', () => {
+    expect(getGateway('o3', { openai: 'key' })).toBeInstanceOf(OpenAIAdapter);
+    expect(getGateway('o3-mini', { openai: 'key' })).toBeInstanceOf(OpenAIAdapter);
+  });
+
+  it('throws for o1/o3 models when OpenAI key is missing', () => {
+    expect(() => getGateway('o1', {})).toThrow('OpenAI API key is not configured.');
+    expect(() => getGateway('o3-mini', {})).toThrow('OpenAI API key is not configured.');
+  });
 });
 
 describe('getProviderFromModel', () => {
   it.each([
     ['gpt-4o', 'openai'],
     ['gpt-4-turbo', 'openai'],
+    ['o1', 'openai'],
+    ['o1-mini', 'openai'],
+    ['o3', 'openai'],
+    ['o3-mini', 'openai'],
     ['claude-sonnet-4-5', 'anthropic'],
     ['claude-haiku-4-5', 'anthropic'],
     ['gemini-1.5-pro', 'google'],

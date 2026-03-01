@@ -164,7 +164,7 @@ describe('AgentLoopEngine', () => {
     expect(toolResultEvent?.content).toContain('3 matches');
   });
 
-  it('aborts when abortSignal is triggered', async () => {
+  it('aborts when abortSignal is triggered before loop starts', async () => {
     const controller = new AbortController();
     const gateway = makeGateway([
       { content: '', tool_calls: [{ id: 'tc1', name: 'read_file', arguments: { path: 'x.ts' } }] },
@@ -178,6 +178,34 @@ describe('AgentLoopEngine', () => {
     });
 
     await expect(loop.run('sys', 'task', 'mock', ALL_TOOLS)).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
+  it('aborts mid-loop when signal fires between tool calls', async () => {
+    const controller = new AbortController();
+    let callCount = 0;
+    const gateway: LLMGateway = {
+      chat: vi.fn(async () => {
+        callCount++;
+        // Abort after first LLM call completes
+        if (callCount === 1) controller.abort();
+        return {
+          content: '',
+          input_tokens: 5, output_tokens: 5, model: 'mock', duration_ms: 1,
+          tool_calls: [{ id: `tc${callCount}`, name: 'read_file', arguments: { path: 'x.ts' } }],
+        };
+      }),
+      abort: vi.fn(),
+      estimateTokens: (t) => Math.ceil(t.length / 4),
+    };
+    const executor = makeExecutor();
+
+    const loop = new AgentLoopEngine(gateway, executor, tracker, 'task-1', {
+      abortSignal: controller.signal,
+    });
+
+    await expect(loop.run('sys', 'task', 'mock', ALL_TOOLS)).rejects.toMatchObject({ name: 'AbortError' });
+    // Should have made exactly 1 LLM call before aborting
+    expect(callCount).toBe(1);
   });
 
   it('accumulates token usage across iterations', async () => {
