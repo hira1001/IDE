@@ -111,7 +111,9 @@ export function AgentCard({
     }
   }, [streamingOutput]);
 
-  useEffect(() => { setEditedOutput(output ?? ''); }, [output]);
+  useEffect(() => {
+    if (!editingOutput) setEditedOutput(output ?? '');
+  }, [output, editingOutput]);
 
   // Close modals on Escape key
   useEffect(() => {

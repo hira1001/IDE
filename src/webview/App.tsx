@@ -301,6 +301,7 @@ export function App() {
   };
 
   const handleLoadTemplate = (template: WorkflowTemplate) => {
+    clearDryRun();
     setConfig(template.config);
     setShowTemplateSelector(false);
   };
