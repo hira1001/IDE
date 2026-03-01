@@ -62,6 +62,13 @@ describe('getGateway', () => {
     expect(() => getGateway('unknown-model-xyz', {})).toThrow('Unknown model: unknown-model-xyz');
   });
 
+  it('throws for bare Ollama model name without ollama: prefix', () => {
+    // Ollama models must be prefixed with "ollama:" (e.g. "ollama:qwen3:8b").
+    // Bare names like "qwen3:8b" are not routed to OllamaAdapter.
+    expect(() => getGateway('qwen3:8b', {})).toThrow('Unknown model: qwen3:8b');
+    expect(() => getGateway('llama3.2', {})).toThrow('Unknown model: llama3.2');
+  });
+
   it('returns OpenAIAdapter for o1 models (reasoning)', () => {
     expect(getGateway('o1', { openai: 'key' })).toBeInstanceOf(OpenAIAdapter);
     expect(getGateway('o1-mini', { openai: 'key' })).toBeInstanceOf(OpenAIAdapter);

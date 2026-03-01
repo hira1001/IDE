@@ -171,6 +171,42 @@ describe('Orchestrator', () => {
 
             vi.useRealTimers();
         });
+
+        it('does not retry on 429 with RESOURCE_EXHAUSTED (quota exhausted)', async () => {
+            // Google-style quota exhaustion: 429 + "RESOURCE_EXHAUSTED" in message
+            mockChat.mockRejectedValue(new Error('429 RESOURCE_EXHAUSTED: quota exceeded, limit: 0'));
+
+            vi.useFakeTimers();
+            const execPromise = orchestrator.execute(baseConfig, {
+                content: '', filename: '', language_id: '', line_count: 0, byte_size: 0
+            });
+
+            await vi.runAllTimersAsync();
+            await execPromise;
+
+            // Task should be in error state; importantly, only 1 API call was made (no retries)
+            const st = orchestrator.getStateManager().serialize();
+            expect(st.task_states['task_1'].status).toBe('error');
+            expect(mockChat).toHaveBeenCalledTimes(1);
+
+            vi.useRealTimers();
+        });
+
+        it('does not retry on 429 with limit: 0 (quota exhausted)', async () => {
+            mockChat.mockRejectedValue(new Error('429 Too Many Requests: limit: 0'));
+
+            vi.useFakeTimers();
+            const execPromise = orchestrator.execute(baseConfig, {
+                content: '', filename: '', language_id: '', line_count: 0, byte_size: 0
+            });
+
+            await vi.runAllTimersAsync();
+            await execPromise;
+
+            expect(mockChat).toHaveBeenCalledTimes(1);
+
+            vi.useRealTimers();
+        });
     });
 
     describe('executeFrom()', () => {
