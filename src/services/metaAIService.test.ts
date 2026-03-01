@@ -74,6 +74,20 @@ Hope it helps!`;
             expect(callArgs.system_prompt).toContain('typescript');
             expect(callArgs.system_prompt).toContain('42');
         });
+
+        it('handles filenames containing $ characters without corruption', async () => {
+            mockChat.mockResolvedValueOnce({ content: JSON.stringify(validConfig) });
+            await service.generateWorkflow('do something', {
+                filename: '$component.ts',  // $ in filename could corrupt String.replace
+                language_id: 'typescript',
+                line_count: 10,
+                byte_size: 0,
+                content: '',
+            });
+            const callArgs = mockChat.mock.calls[0][0] as { system_prompt: string };
+            // Must appear verbatim — not corrupted by String.replace special patterns
+            expect(callArgs.system_prompt).toContain('$component.ts');
+        });
     });
 
     describe('validateConfig() — enhanced semantic checks', () => {

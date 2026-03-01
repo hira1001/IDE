@@ -203,6 +203,63 @@ describe('PromptBuilder', () => {
       expect(prompt).toContain('Review result');
     });
 
+    it('resolves correct step output when same agent_id appears in multiple steps', () => {
+      // This tests the bug fix: previously from_step was ignored and the first matching
+      // agent_id task was used — causing wrong output_key when the same agent runs twice.
+      const task_step1: Task = {
+        task_id: 'task_s1',
+        agent_id: 'agent_1',
+        task_name: 'Step 1',
+        instructions: [],
+        constraints: [],
+        output_format: 'Markdown',
+        output_key: 'output_step1',
+        input_mapping: [],
+        enable_handover_note: false,
+      };
+      const task_step2: Task = {
+        task_id: 'task_s2',
+        agent_id: 'agent_1', // same agent, different step!
+        task_name: 'Step 2',
+        instructions: [],
+        constraints: [],
+        output_format: 'Markdown',
+        output_key: 'output_step2',
+        input_mapping: [],
+        enable_handover_note: false,
+      };
+      const task_consumer: Task = {
+        task_id: 'task_consumer',
+        agent_id: 'agent_1',
+        task_name: 'Consumer',
+        instructions: [],
+        constraints: [],
+        output_format: 'Markdown',
+        output_key: 'consumer_out',
+        // References step 2's output specifically (not step 1)
+        input_mapping: [{ from_step: 2, from_agent_id: 'agent_1', label: 'Step 2 result' }],
+        enable_handover_note: false,
+      };
+      const config: WorkflowConfig = {
+        agents: [AGENT],
+        workflow: [
+          { step: 1, type: 'sequential', pause_after: false, tasks: [task_step1] },
+          { step: 2, type: 'sequential', pause_after: false, tasks: [task_step2] },
+          { step: 3, type: 'sequential', pause_after: false, tasks: [task_consumer] },
+        ],
+      };
+
+      const stateManager = new StateManager();
+      stateManager.setOutput('output_step1', 'Output from step 1');
+      stateManager.setOutput('output_step2', 'Output from step 2');
+      const builder = new PromptBuilder(stateManager, null);
+      const prompt = builder.buildUserPrompt(task_consumer, config);
+
+      // Should include step 2 output, NOT step 1
+      expect(prompt).toContain('Output from step 2');
+      expect(prompt).not.toContain('Output from step 1');
+    });
+
     it('skips input_mapping entry when referenced agent output is not yet set', () => {
       const task2: Task = {
         task_id: 'task_2',
