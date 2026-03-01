@@ -49,7 +49,7 @@ Hope it helps!`;
         });
 
         it('throws error for invalid JSON or missing required fields', async () => {
-            mockChat.mockResolvedValueOnce({ content: '{"agents": []}' }); // missing workflow
+            mockChat.mockResolvedValue({ content: '{"agents": []}' }); // missing workflow
             await expect(service.generateWorkflow('do something', null)).rejects.toThrow(/Invalid WorkflowConfig/);
         });
 
@@ -114,7 +114,7 @@ Hope it helps!`;
         it('rejects a task referencing an unknown agent_id', async () => {
             const cfg = makeConfig({});
             cfg.workflow[0].tasks[0].agent_id = 'agent_999';
-            mockChat.mockResolvedValueOnce({ content: JSON.stringify(cfg) });
+            mockChat.mockResolvedValue({ content: JSON.stringify(cfg) });
             await expect(service.generateWorkflow('x', null)).rejects.toThrow(/unknown agent_id/);
         });
 
@@ -126,7 +126,7 @@ Hope it helps!`;
                 output_key: 'result', // same as task_001
                 input_mapping: [], enable_handover_note: false,
             });
-            mockChat.mockResolvedValueOnce({ content: JSON.stringify(cfg) });
+            mockChat.mockResolvedValue({ content: JSON.stringify(cfg) });
             await expect(service.generateWorkflow('x', null)).rejects.toThrow(/Duplicate output_key/);
         });
 
@@ -135,7 +135,7 @@ Hope it helps!`;
             cfg.workflow[0].tasks[0].input_mapping = [
                 { from_step: 99, from_agent_id: 'agent_001', label: 'ghost step' },
             ];
-            mockChat.mockResolvedValueOnce({ content: JSON.stringify(cfg) });
+            mockChat.mockResolvedValue({ content: JSON.stringify(cfg) });
             await expect(service.generateWorkflow('x', null)).rejects.toThrow(/non-existent step 99/);
         });
 
@@ -151,7 +151,7 @@ Hope it helps!`;
         it('rejects a task with an empty instructions array', async () => {
             const cfg = makeConfig({});
             cfg.workflow[0].tasks[0].instructions = [];
-            mockChat.mockResolvedValueOnce({ content: JSON.stringify(cfg) });
+            mockChat.mockResolvedValue({ content: JSON.stringify(cfg) });
             await expect(service.generateWorkflow('x', null)).rejects.toThrow(/no instructions/);
         });
     });

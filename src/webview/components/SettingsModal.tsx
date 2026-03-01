@@ -9,6 +9,7 @@ interface SettingsCurrent {
   ollamaEndpoint: string;
   vscodeLMCount: number;
   defaultModel: string;
+  language: string;
   availableModels: AvailableModels;
 }
 
@@ -26,9 +27,9 @@ interface SettingsModalProps {
 type ProviderKey = 'openai' | 'anthropic' | 'google';
 
 const PROVIDER_META: { id: ProviderKey; label: string; placeholder: string }[] = [
-  { id: 'openai',    label: 'OpenAI',    placeholder: 'sk-...' },
+  { id: 'openai', label: 'OpenAI', placeholder: 'sk-...' },
   { id: 'anthropic', label: 'Anthropic', placeholder: 'sk-ant-...' },
-  { id: 'google',    label: 'Google AI', placeholder: 'AIza...' },
+  { id: 'google', label: 'Google AI', placeholder: 'AIza...' },
 ];
 
 export function SettingsModal({ onClose }: SettingsModalProps) {
@@ -40,6 +41,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const [ollamaInput, setOllamaInput] = useState('');
   const [ollamaStatus, setOllamaStatus] = useState<OllamaResult | 'testing' | null>(null);
   const [defaultModelInput, setDefaultModelInput] = useState('');
+  const [languageInput, setLanguageInput] = useState('');
   const feedbackTimersRef = useRef<Partial<Record<ProviderKey, ReturnType<typeof setTimeout>>>>({});
 
   // Clear all pending feedback timers on unmount
@@ -58,6 +60,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
         setSettings(s);
         setOllamaInput(s.ollamaEndpoint);
         setDefaultModelInput(s.defaultModel);
+        setLanguageInput(s.language);
       }
 
       if (msg.type === 'settings:saved') {
@@ -101,6 +104,12 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     postMessage({ type: 'settings:save', payload: { provider, key } });
   }, [inputs, postMessage]);
 
+  const handleSaveLanguage = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    const lang = e.target.value;
+    setLanguageInput(lang);
+    postMessage({ type: 'settings:save_language', payload: { language: lang } });
+  }, [postMessage]);
+
   const handleClearKey = useCallback((provider: ProviderKey) => {
     postMessage({ type: 'settings:clear', payload: { provider } });
   }, [postMessage]);
@@ -120,22 +129,22 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
   const allAvailableModels = settings
     ? [
-        ...settings.availableModels.openai,
-        ...settings.availableModels.anthropic,
-        ...settings.availableModels.google,
-        ...settings.availableModels.ollama,
-        ...settings.availableModels.vscodeLM,
-      ]
+      ...settings.availableModels.openai,
+      ...settings.availableModels.anthropic,
+      ...settings.availableModels.google,
+      ...settings.availableModels.ollama,
+      ...settings.availableModels.vscodeLM,
+    ]
     : [];
 
   const groupedModels = settings
     ? [
-        ...(settings.availableModels.openai.length > 0   ? [{ label: 'OpenAI',         models: settings.availableModels.openai }]   : []),
-        ...(settings.availableModels.anthropic.length > 0 ? [{ label: 'Anthropic',       models: settings.availableModels.anthropic }] : []),
-        ...(settings.availableModels.google.length > 0   ? [{ label: 'Google AI',        models: settings.availableModels.google }]   : []),
-        ...(settings.availableModels.ollama.length > 0   ? [{ label: 'Local (Ollama)',   models: settings.availableModels.ollama }]   : []),
-        ...(settings.availableModels.vscodeLM.length > 0 ? [{ label: 'VS Code LM',       models: settings.availableModels.vscodeLM }] : []),
-      ]
+      ...(settings.availableModels.openai.length > 0 ? [{ label: 'OpenAI', models: settings.availableModels.openai }] : []),
+      ...(settings.availableModels.anthropic.length > 0 ? [{ label: 'Anthropic', models: settings.availableModels.anthropic }] : []),
+      ...(settings.availableModels.google.length > 0 ? [{ label: 'Google AI', models: settings.availableModels.google }] : []),
+      ...(settings.availableModels.ollama.length > 0 ? [{ label: 'Local (Ollama)', models: settings.availableModels.ollama }] : []),
+      ...(settings.availableModels.vscodeLM.length > 0 ? [{ label: 'VS Code LM', models: settings.availableModels.vscodeLM }] : []),
+    ]
     : [];
 
   // For the Ollama section: prefer fresh models from the latest test result over stale settings
@@ -157,8 +166,8 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
         <div className="settings-modal__header">
           <span className="settings-modal__title">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true" style={{ marginRight: 6 }}>
-              <circle cx="7" cy="7" r="2.5" stroke="currentColor" strokeWidth="1.3"/>
-              <path d="M7 1v1.5M7 11.5V13M1 7h1.5M11.5 7H13M2.93 2.93l1.06 1.06M10.01 10.01l1.06 1.06M2.93 11.07l1.06-1.06M10.01 3.99l1.06-1.06" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+              <circle cx="7" cy="7" r="2.5" stroke="currentColor" strokeWidth="1.3" />
+              <path d="M7 1v1.5M7 11.5V13M1 7h1.5M11.5 7H13M2.93 2.93l1.06 1.06M10.01 10.01l1.06 1.06M2.93 11.07l1.06-1.06M10.01 3.99l1.06-1.06" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
             </svg>
             Settings
           </span>
@@ -230,33 +239,49 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
             <p className="settings-section__desc">Model used by AI to generate workflows. Configure at least one API key above first.</p>
             <div className="settings-provider-row__controls">
               {allAvailableModels.length > 0 ? (
-                <select
-                  className="field-select"
-                  value={allAvailableModels.includes(defaultModelInput) ? defaultModelInput : ''}
-                  onChange={(e) => setDefaultModelInput(e.target.value)}
-                  style={{ flex: 1 }}
-                >
-                  {groupedModels.map((g) => (
-                    <optgroup key={g.label} label={g.label}>
-                      {g.models.map((m) => (
-                        <option key={m} value={m}>{m}</option>
+                <>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
+                    <select
+                      className="field-select"
+                      value={allAvailableModels.includes(defaultModelInput) ? defaultModelInput : '__custom__'}
+                      onChange={(e) => {
+                        if (e.target.value !== '__custom__') setDefaultModelInput(e.target.value);
+                      }}
+                      style={{ width: '100%' }}
+                    >
+                      {groupedModels.map((g) => (
+                        <optgroup key={g.label} label={g.label}>
+                          {g.models.map((m) => (
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                        </optgroup>
                       ))}
-                    </optgroup>
-                  ))}
-                </select>
+                      <option value="__custom__">Custom Model...</option>
+                    </select>
+                    {!allAvailableModels.includes(defaultModelInput) && (
+                      <input
+                        className="field-input"
+                        value={defaultModelInput}
+                        onChange={(e) => setDefaultModelInput(e.target.value)}
+                        placeholder="Type custom model name (e.g. gemini-2.5-flash)"
+                        style={{ width: '100%' }}
+                        autoFocus
+                      />
+                    )}
+                  </div>
+                </>
               ) : (
                 <input
                   className="field-input"
                   style={{ flex: 1 }}
                   value={defaultModelInput}
                   onChange={(e) => setDefaultModelInput(e.target.value)}
-                  placeholder="Configure an API key first"
-                  disabled={allAvailableModels.length === 0}
+                  placeholder="Type a model name or configure an API key"
                 />
               )}
               <button
                 className="btn btn--primary btn--sm"
-                disabled={defaultModelInput === (settings?.defaultModel ?? '')}
+                disabled={!defaultModelInput || defaultModelInput === (settings?.defaultModel ?? '')}
                 onClick={handleSaveDefaultModel}
               >
                 Apply
@@ -340,12 +365,57 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                   )}
                 </div>
               ) : (
-                <div className="settings-feedback settings-feedback--neutral">
-                  ⚪ No VS Code LM models detected. Install Cursor or GitHub Copilot extension.
+                <div style={{ color: 'var(--vscode-descriptionForeground)', fontSize: 13, marginTop: 4 }}>
+                  Configure an API key or install Ollama to see available models.
                 </div>
               )
             ) : null}
           </section>
+
+          {/* ── Language ── */}
+          <section className="settings-section">
+            <h3 className="settings-section__title">Display Language</h3>
+            <p className="settings-section__desc">Select the language for the UI and AI-generated prompts (workflow & plans).</p>
+            <div className="settings-provider-row__controls">
+              <select
+                className="field-select"
+                value={languageInput || 'auto'}
+                onChange={handleSaveLanguage}
+                style={{ width: '100%' }}
+              >
+                <option value="auto">Auto (Match VS Code Language)</option>
+                <option value="en">English</option>
+                <option value="ja">Japanese (日本語)</option>
+              </select>
+            </div>
+          </section>
+
+          {/* ── Custom Model Override ── */}
+          {(defaultModelInput === '__custom__' || (defaultModelInput && allAvailableModels.length > 0 && !allAvailableModels.includes(defaultModelInput))) && (
+            <section className="settings-section">
+              <h3 className="settings-section__title">Custom Model Override</h3>
+              <p className="settings-section__desc">
+                When "Custom Model..." is selected, this model will be used.
+                This is useful for models not listed in the dropdown, or for local models.
+              </p>
+              <div className="settings-provider-row__controls">
+                <input
+                  className="field-input"
+                  value={defaultModelInput}
+                  onChange={(e) => setDefaultModelInput(e.target.value)}
+                  placeholder="Type custom model name (e.g. gemini-2.5-flash)"
+                  style={{ width: '100%' }}
+                />
+                <button
+                  className="btn btn--primary btn--sm"
+                  disabled={!defaultModelInput || defaultModelInput === (settings?.defaultModel ?? '')}
+                  onClick={handleSaveDefaultModel}
+                >
+                  Apply
+                </button>
+              </div>
+            </section>
+          )}
 
           {/* ── Reset ── */}
           <section className="settings-section settings-section--danger">

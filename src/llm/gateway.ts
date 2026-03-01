@@ -48,7 +48,9 @@ export function getGateway(
     if (!apiKeys.google) throw new Error('Google AI API key is not configured.');
     return new GoogleAIAdapter(apiKeys.google);
   }
-  throw new Error(`Unknown model: ${model}`);
+
+  // If no prefix matches, assume it's a local Ollama model (e.g., 'qwen3:8b')
+  return new OllamaAdapter(apiKeys.ollama ?? 'http://localhost:11434');
 }
 
 /** Returns true for any OpenAI model (gpt-*, o1*, o3*). */
@@ -62,7 +64,9 @@ export function getProviderFromModel(model: LLMModel): 'openai' | 'anthropic' | 
   if (isOpenAIModel(model)) return 'openai';
   if (model.startsWith('claude-')) return 'anthropic';
   if (model.startsWith('gemini-')) return 'google';
-  throw new Error(`Unknown model provider for: ${model}`);
+
+  // If no prefix matches, assume it's a local Ollama model
+  return 'ollama';
 }
 
 export function getRequiredProviders(models: LLMModel[]): Set<'openai' | 'anthropic' | 'google' | 'ollama' | 'vscode'> {

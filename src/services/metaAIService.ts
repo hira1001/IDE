@@ -19,15 +19,17 @@ DECOMPOSITION RULES:
    - "conditional": review→revise loops where a later step may loop back
 3. Every task MUST have a unique output_key (snake_case, e.g. "api_spec", "test_suite").
 4. Use input_mapping to wire outputs between steps:
-   - from_step: 0, from_agent_id: "__source__" → the active file content (always available)
+   - from_step: 0, from_agent_id: "__project__" → full project context including file tree and related files (PREFERRED for most tasks)
+   - from_step: 0, from_agent_id: "__source__" → only the single active editor file
+   - from_step: 0, from_agent_id: "__tree__" → project file tree only (lightweight)
    - from_step: N, from_agent_id: "agent_XXX" → the output_key produced by that agent in step N
    - Tasks in step 2 that depend on step 1 output MUST use "sequential" type.
+   - For the FIRST step, ALWAYS use __project__ so the agent can see the full project structure and files.
 5. Set pause_after: true only for steps requiring human review before continuing.
-6. Assign the most appropriate model per agent using ONLY models from the AVAILABLE MODELS list:
-   - Complex reasoning / architecture → most capable available model
-   - Fast iteration / summaries → fastest available model
-   - Long-context tasks → highest context-window model available
+6. IMPORTANT: Set the model for ALL agents to exactly "{{default_model}}". Do not use any other model.
 7. Every agent must have a clear persona describing their specialty.
+8. IMPORTANT: Set "use_tools": true, "auto_apply_edits": true, and "max_tool_iterations": 15 on EVERY task. This enables agents to autonomously read files, edit code, search the codebase, and run terminal commands.
+9. IMPORTANT: All output strings (agent name, persona, tasks, instructions) MUST be generated in {{target_language}} language.
 
 AVAILABLE MODELS:
 {{available_models}}
@@ -59,9 +61,12 @@ Output ONLY the JSON object below. No markdown fences, no explanation.
           "output_format": "Markdown",
           "output_key": "unique_output_key",
           "input_mapping": [
-            { "from_step": 0, "from_agent_id": "__source__", "label": "Source file" }
+            { "from_step": 0, "from_agent_id": "__project__", "label": "Project context" }
           ],
-          "enable_handover_note": false
+          "enable_handover_note": false,
+          "use_tools": true,
+          "auto_apply_edits": true,
+          "max_tool_iterations": 15
         }
       ]
     },
@@ -81,7 +86,10 @@ Output ONLY the JSON object below. No markdown fences, no explanation.
           "input_mapping": [
             { "from_step": 1, "from_agent_id": "agent_001", "label": "Draft from step 1" }
           ],
-          "enable_handover_note": true
+          "enable_handover_note": true,
+          "use_tools": true,
+          "auto_apply_edits": true,
+          "max_tool_iterations": 15
         }
       ]
     }
@@ -92,18 +100,18 @@ export class MetaAIService {
   constructor(
     private readonly apiKeys: ApiKeys,
     private readonly model: LLMModel = 'gpt-4o'
-  ) {}
+  ) { }
 
   private buildAvailableModelsSection(): string {
     const lines: string[] = [];
-    if (this.apiKeys.openai)    lines.push('- OpenAI: gpt-4o, gpt-4o-mini');
+    if (this.apiKeys.openai) lines.push('- OpenAI: gpt-4o, gpt-4o-mini');
     if (this.apiKeys.anthropic) lines.push('- Anthropic: claude-opus-4-6, claude-sonnet-4-6, claude-haiku-4-5');
-    if (this.apiKeys.google)    lines.push('- Google: gemini-2.0-flash, gemini-1.5-pro, gemini-1.5-flash');
-    if (this.apiKeys.ollama)    lines.push('- Local (Ollama): use "ollama:<model>" prefix, e.g. "ollama:llama3.2"');
+    if (this.apiKeys.google) lines.push('- Google: gemini-2.5-flash, gemini-2.5-pro, gemini-2.0-flash, gemini-1.5-pro, gemini-1.5-flash');
+    if (this.apiKeys.ollama) lines.push('- Local (Ollama): use "ollama:<model>" prefix, e.g. "ollama:llama3.2"');
     return lines.length > 0 ? lines.join('\n') : '- OpenAI: gpt-4o, gpt-4o-mini';
   }
 
-  async generateWorkflow(instruction: string, source: SourceInput | null): Promise<WorkflowConfig> {
+  async generateWorkflow(instruction: string, source: SourceInput | null, targetLanguage: string = 'en'): Promise<WorkflowConfig> {
     const filename = source?.filename ?? '(none)';
     const languageId = source?.language_id ?? 'unknown';
     const lineCount = String(source?.line_count ?? 0);
@@ -114,20 +122,58 @@ export class MetaAIService {
       .replace('{{filename}}', () => filename)
       .replace('{{language_id}}', () => languageId)
       .replace('{{line_count}}', () => lineCount)
-      .replace('{{available_models}}', () => modelsSection);
+      .replace('{{available_models}}', () => modelsSection)
+      .replace('{{default_model}}', () => this.model)
+      .replace('{{target_language}}', () => targetLanguage);
 
     const userPrompt = `Design a workflow for the following request:\n\n${instruction}`;
 
     const gateway = getGateway(this.model, this.apiKeys);
-    const response = await gateway.chat({
-      model: this.model,
-      system_prompt: systemPrompt,
-      user_prompt: userPrompt,
-      max_tokens: 4096,
-      temperature: 0.2, // Very low for deterministic, valid JSON output
-    });
 
-    return this.parseResponse(response.content);
+    // Retry up to 2 times if LLM returns empty content
+    const MAX_RETRIES = 2;
+    let lastError: Error | null = null;
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      const response = await gateway.chat({
+        model: this.model,
+        system_prompt: systemPrompt,
+        user_prompt: userPrompt,
+        max_tokens: 4096,
+        temperature: 0.2,
+      });
+
+      if (!response.content || response.content.trim().length === 0) {
+        lastError = new Error(
+          `LLM (${this.model}) returned an empty response. ` +
+          `This may mean the model is temporarily unavailable or the API key quota is exhausted. ` +
+          `Try a different model in Settings (e.g. gemini-2.0-flash) or check your API key.`
+        );
+        continue; // retry
+      }
+
+      try {
+        const config = this.parseResponse(response.content);
+        // Force all generated agents to use the configured default model
+        for (const agent of config.agents) {
+          agent.model = this.model;
+        }
+        // Force Agent Mode (ReAct loop with tools) on all tasks
+        for (const step of config.workflow) {
+          for (const task of step.tasks) {
+            task.use_tools = true;
+            task.auto_apply_edits = task.auto_apply_edits ?? true;
+            task.max_tool_iterations = task.max_tool_iterations ?? 15;
+          }
+        }
+        return config;
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        // If JSON parse failed, retry
+        continue;
+      }
+    }
+
+    throw lastError ?? new Error('Workflow generation failed after retries.');
   }
 
   private parseResponse(content: string): WorkflowConfig {
@@ -252,4 +298,164 @@ Output only the markdown document. No preamble. No explanation. No code fences.`
       }
     }
   }
+
+  /**
+   * Generate a Markdown workflow plan from a user prompt.
+   * Produces human-readable Markdown that an external AI agent
+   * (Antigravity, Cursor, etc.) can follow step-by-step.
+   */
+  async generatePlan(prompt: string, language: string = 'ja', config?: WorkflowConfig): Promise<string> {
+    const systemPrompt = PLAN_PROMPT_TEMPLATE[language] ?? PLAN_PROMPT_TEMPLATE['en'];
+
+    // Build a rich user prompt that includes full workflow context
+    let userPrompt = prompt ? `## ユーザーの指示\n${prompt}\n\n` : '';
+
+    if (config) {
+      userPrompt += '## 生成済みワークフロー構成\n\n';
+      for (const step of config.workflow) {
+        userPrompt += `### Step ${step.step} (${step.type})\n`;
+        for (const task of step.tasks) {
+          const agent = config.agents.find(a => a.id === task.agent_id);
+          if (agent) {
+            userPrompt += `\n#### Agent: ${agent.name}\n`;
+            userPrompt += `- **Model:** ${agent.model}\n`;
+            userPrompt += `- **Persona:** ${agent.persona}\n`;
+            userPrompt += `- **Task:** ${task.task_name}\n`;
+            userPrompt += `- **Instructions:**\n${task.instructions}\n`;
+            if (task.output_key) {
+              userPrompt += `- **Output Key:** ${task.output_key}\n`;
+            }
+          }
+        }
+        userPrompt += '\n';
+      }
+      userPrompt += '\n上記のワークフロー構成の全情報を漏れなく反映した計画書を生成してください。各Agentのinstructionsに記載された作業内容をすべて含め、さらに構造化・改善してください。\n';
+    }
+
+    const gateway = getGateway(this.model, this.apiKeys);
+    const response = await gateway.chat({
+      model: this.model,
+      system_prompt: systemPrompt,
+      user_prompt: userPrompt,
+      max_tokens: 8192,
+      temperature: 0.3,
+    });
+
+    if (!response.content || response.content.trim().length === 0) {
+      throw new Error(
+        `LLM (${this.model}) returned an empty response. ` +
+        `Check your API key or try a different model.`
+      );
+    }
+
+    return response.content.trim();
+  }
 }
+
+// ─── Plan generation prompt templates ───────────────────────────────────────
+
+const PLAN_PROMPT_TEMPLATE: Record<string, string> = {
+  ja: `あなたはAIプロジェクトマネージャーです。ユーザーの指示を分析し、AIエージェントが実行するための「ワークフロー計画書」をMarkdown形式で生成してください。
+
+## ルール
+
+1. ユーザーの指示を複数のMilestoneに分解する。各Milestoneに固有のペルソナ（役割）を割り当てる。
+2. 各Milestoneには以下を含める:
+   - ペルソナ（そのステップの担当者の役割と専門性）
+   - 具体的なタスクリスト
+   - 完了条件（受け入れ基準）
+   - ファイルのヒント（拘束力なし — AIの判断で最適なファイルを選んでよい）
+3. 並列実行可能なMilestoneは明示する（依存関係がないもの）
+4. レビューや検証のMilestoneには回帰条件を設ける（重大な問題→前のMilestoneに戻る、最大3回）
+5. 回帰上限に達した場合は作業停止し、人間に相談するよう指示する
+6. ユーザーの指示の意図と方向性を正しく汲み取り、さらに良い構造に改善してよい
+
+## 出力フォーマット
+
+以下のMarkdown形式を厳密に守ってください:
+
+# ワークフロー計画書: [タイトル]
+
+## 概要
+[プロジェクトの目的と概要を2-3文で]
+
+## フロー
+[ASCII図でMilestone間の依存関係、並列、回帰を表現]
+
+## M1: [Milestone名]
+**ペルソナ:** [役割名] — [一文の説明]
+
+[タスクの説明（番号付きリスト）]
+
+**ヒント:** [関連しそうなディレクトリやファイル（拘束力なし）]
+**完了条件:** [具体的な受け入れ基準]
+
+## M2: [Milestone名]
+...
+
+## 進捗
+- [ ] M1: [名前]
+- [ ] M2: [名前]
+...
+
+## 判断ログ
+（各Milestoneで下した重要な判断と理由を記録）
+
+## 発見メモ
+（作業中の予期せぬ発見を記録）
+
+## 成果と振り返り
+（全Milestone完了後にAIが自動記入）`,
+
+  en: `You are an AI project manager. Analyze the user's request and generate a "Workflow Plan" in Markdown format for an AI agent to execute.
+
+## Rules
+
+1. Decompose the user's request into multiple Milestones. Assign a unique persona (role) to each Milestone.
+2. Each Milestone must include:
+   - Persona (the role and expertise of the person responsible for this step)
+   - Specific task list
+   - Completion criteria (acceptance criteria)
+   - File hints (non-binding — the AI may choose optimal files at its discretion)
+3. Explicitly mark Milestones that can run in parallel (no dependencies)
+4. Review/verification Milestones should have regression conditions (critical issues → go back to previous Milestone, max 3 times)
+5. If regression limit is reached, stop work and consult the human
+6. Correctly capture the intent and direction of the user's instructions, and improve the structure
+
+## Output Format
+
+Strictly follow this Markdown format:
+
+# Workflow Plan: [Title]
+
+## Overview
+[Purpose and overview in 2-3 sentences]
+
+## Flow
+[ASCII diagram showing dependencies, parallelism, and regression between Milestones]
+
+## M1: [Milestone Name]
+**Persona:** [Role] — [One-line description]
+
+[Task description (numbered list)]
+
+**Hints:** [Relevant directories or files (non-binding)]
+**Completion Criteria:** [Specific acceptance criteria]
+
+## M2: [Milestone Name]
+...
+
+## Progress
+- [ ] M1: [Name]
+- [ ] M2: [Name]
+...
+
+## Decision Log
+(Record important decisions and rationale at each Milestone)
+
+## Discovery Notes
+(Record unexpected findings during work)
+
+## Outcomes & Retrospective
+(AI fills in after all Milestones are completed)`,
+};

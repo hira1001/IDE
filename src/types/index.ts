@@ -242,7 +242,7 @@ export interface ToolDefinition {
   description: string;
   parameters: {
     type: 'object';
-    properties: Record<string, { type: string; description: string; [k: string]: unknown }>;
+    properties: Record<string, { type: string; description: string;[k: string]: unknown }>;
     required?: string[];
   };
 }
@@ -380,12 +380,19 @@ export type WebviewMessageType =
   | 'settings:save_ollama'
   | 'settings:test_ollama'
   | 'settings:save_default_model'
+  | 'settings:save_language'
   | 'settings:current'
   | 'settings:saved'
   | 'settings:ollama_result'
   | 'command:resetState'
   | 'command:configureApiKeys'
-  | 'onboarding:no_api_keys';
+  | 'onboarding:no_api_keys'
+  | 'plan:generate'
+  | 'plan:generated'
+  | 'plan:error'
+  | 'plan:copy'
+  | 'plan:sendToAI'
+  | 'plan:saveTemplate';
 
 export interface WebviewMessage {
   type: WebviewMessageType;

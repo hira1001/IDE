@@ -42,9 +42,9 @@ describe('validateWorkflow', () => {
     expect(errors.filter((e) => e.type === 'error')).toHaveLength(0);
   });
 
-  it('returns error when source is null', () => {
+  it('accepts null source without error (active file no longer required)', () => {
     const errors = validateWorkflow(validConfig, null, { openai: 'sk-test' });
-    expect(errors.some((e) => e.message.includes('No active editor'))).toBe(true);
+    expect(errors.some((e) => e.message.includes('No active editor'))).toBe(false);
   });
 
   it('returns error when API key is missing', () => {
@@ -160,7 +160,7 @@ describe('validateWorkflow', () => {
       agents: [{ id: 'agent_001', name: 'Writer', persona: 'P', model: 'gpt-4o' }],
       workflow: [{
         step: 1, type: 'parallel', pause_after: false,
-        tasks: ['t1','t2','t3','t4','t5','t6'].map(makeTask),
+        tasks: ['t1', 't2', 't3', 't4', 't5', 't6'].map(makeTask),
       }],
     };
     const errors = validateWorkflow(manyParallelConfig, validSource, { openai: 'sk-test' });

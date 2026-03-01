@@ -1,6 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { WorkflowConfig, WorkflowStep, TaskState, Agent } from '../../types/index.js';
+import { WorkflowConfig, WorkflowStep, TaskState, Agent, Task } from '../../types/index.js';
 import { StepBlock } from './StepBlock.js';
 import { AvailableModels } from '../hooks/useWorkflowState.js';
 
@@ -11,6 +11,7 @@ interface PipelineViewProps {
   streamingChunks?: Record<string, string>;
   toolEvents?: Record<string, Array<{ event_type: string; tool_name?: string; content?: string; iteration?: number }>>;
   availableModels?: AvailableModels;
+  defaultModel: string;
   onChange: (config: WorkflowConfig) => void;
   onRetryTask: (taskId: string) => void;
   onToast?: (message: string, type: 'success' | 'error' | 'info') => void;
@@ -24,6 +25,7 @@ export function PipelineView({
   streamingChunks,
   toolEvents,
   availableModels,
+  defaultModel,
   onChange,
   onRetryTask,
   onToast,
@@ -31,25 +33,15 @@ export function PipelineView({
 }: PipelineViewProps) {
   const { t } = useTranslation();
 
-  React.useEffect(() => {
-    const handleUpdateAgent = (e: Event) => {
-      const { agentId, updatedAgent } = (e as CustomEvent).detail as { agentId: string; updatedAgent: Agent };
-      const agents = config.agents.map((a) => (a.id === agentId ? updatedAgent : a));
-      onChange({ ...config, agents });
-    };
+  const handleUpdateAgent = (updatedAgent: Agent) => {
+    const agents = config.agents.map((a) => (a.id === updatedAgent.id ? updatedAgent : a));
+    onChange({ ...config, agents });
+  };
 
-    const handleAddAgent = (e: Event) => {
-      const { agent } = (e as CustomEvent).detail as { agent: Agent };
-      onChange({ ...config, agents: [...config.agents, agent] });
-    };
-
-    document.addEventListener('aao:update-agent', handleUpdateAgent);
-    document.addEventListener('aao:add-agent', handleAddAgent);
-    return () => {
-      document.removeEventListener('aao:update-agent', handleUpdateAgent);
-      document.removeEventListener('aao:add-agent', handleAddAgent);
-    };
-  }, [config, onChange]);
+  const handleAddAgentAndTask = (stepIndex: number, newTask: Task, newAgent: Agent) => {
+    const workflow = config.workflow.map((s, i) => (i === stepIndex ? { ...s, tasks: [...s.tasks, newTask] } : s));
+    onChange({ ...config, workflow, agents: [...config.agents, newAgent] });
+  };
 
   const updateStep = (stepIndex: number, updatedStep: WorkflowStep) => {
     const workflow = config.workflow.map((s, i) => (i === stepIndex ? updatedStep : s));
@@ -58,6 +50,25 @@ export function PipelineView({
 
   const deleteStep = (stepIndex: number) => {
     const workflow = config.workflow.filter((_, i) => i !== stepIndex);
+    onChange({ ...config, workflow });
+  };
+
+  const handleMoveTask = (sourceStepIndex: number, sourceTaskIndex: number, targetStepIndex: number, targetTaskIndex: number) => {
+    const workflow = [...config.workflow];
+    const sourceStep = { ...workflow[sourceStepIndex], tasks: [...workflow[sourceStepIndex].tasks] };
+    const targetStep = sourceStepIndex === targetStepIndex ? sourceStep : { ...workflow[targetStepIndex], tasks: [...workflow[targetStepIndex].tasks] };
+
+    const [movedTask] = sourceStep.tasks.splice(sourceTaskIndex, 1);
+    targetStep.tasks.splice(targetTaskIndex, 0, movedTask);
+
+    if (sourceStepIndex !== targetStepIndex) {
+      // Fix input mappings that might reference the old step. This is a best effort cleanup.
+      // Usually users will just configure it again, but this helps.
+    }
+
+    workflow[sourceStepIndex] = sourceStep;
+    workflow[targetStepIndex] = targetStep;
+
     onChange({ ...config, workflow });
   };
 
@@ -85,9 +96,13 @@ export function PipelineView({
             streamingChunks={streamingChunks}
             toolEvents={toolEvents}
             availableModels={availableModels}
+            defaultModel={defaultModel}
             onUpdateStep={(updatedStep) => updateStep(idx, updatedStep)}
+            onUpdateAgent={handleUpdateAgent}
+            onAddAgentAndTask={(t: Task, a: Agent) => handleAddAgentAndTask(idx, t, a)}
             onDeleteStep={() => deleteStep(idx)}
             onRetryTask={onRetryTask}
+            onMoveTask={handleMoveTask}
             onToast={onToast}
             onOpenSettings={onOpenSettings}
           />
@@ -96,8 +111,8 @@ export function PipelineView({
           {idx < config.workflow.length - 1 && (
             <div className="step-connector">
               <svg className="step-connector__svg" width="16" height="20" viewBox="0 0 16 20" fill="none" aria-hidden="true">
-                <line x1="8" y1="0" x2="8" y2="14" stroke="currentColor" strokeWidth="1.5" strokeDasharray="3 2"/>
-                <path d="M4 11l4 6 4-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+                <line x1="8" y1="0" x2="8" y2="14" stroke="currentColor" strokeWidth="1.5" strokeDasharray="3 2" />
+                <path d="M4 11l4 6 4-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
               </svg>
             </div>
           )}

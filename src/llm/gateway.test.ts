@@ -58,8 +58,9 @@ describe('getGateway', () => {
     expect(() => getGateway('vscode:copilot', {})).toThrow('VS Code LM API is not available');
   });
 
-  it('throws for unknown model prefix', () => {
-    expect(() => getGateway('unknown-model-xyz', {})).toThrow('Unknown model: unknown-model-xyz');
+  it('defaults to OllamaAdapter for unknown model prefix', () => {
+    const gw = getGateway('unknown-model-xyz', {});
+    expect(gw).toBeInstanceOf(OllamaAdapter);
   });
 
   it('returns OpenAIAdapter for o1 models (reasoning)', () => {
@@ -97,8 +98,8 @@ describe('getProviderFromModel', () => {
     expect(getProviderFromModel(model)).toBe(expected);
   });
 
-  it('throws for unknown model', () => {
-    expect(() => getProviderFromModel('unknown-xyz')).toThrow();
+  it('defaults to ollama provider for unknown model', () => {
+    expect(getProviderFromModel('unknown-xyz')).toBe('ollama');
   });
 });
 

@@ -9,6 +9,7 @@ import {
   DryRunResult,
   ProjectContextSummary,
 } from '../../types/index.js';
+import i18n from '../i18n/index.js';
 import { useVSCode } from './useVSCode.js';
 
 export interface AvailableModels {
@@ -30,6 +31,7 @@ interface WorkflowState {
   generationError: string | null;
   noApiKeys: boolean;
   availableModels: AvailableModels;
+  defaultModel: string;
   /** Live streaming text per task_id. Cleared when task reaches 'completed'. */
   streamingChunks: Record<string, string>;
   /** Tool call events per task_id for agentic tasks. Cleared when task completes. */
@@ -51,6 +53,7 @@ const INITIAL_STATE: WorkflowState = {
   generationError: null,
   noApiKeys: false,
   availableModels: EMPTY_AVAILABLE_MODELS,
+  defaultModel: 'gpt-4o',
   streamingChunks: {},
   toolEvents: {},
 };
@@ -180,12 +183,25 @@ export function useWorkflowState() {
             anthropic?: 'set' | 'unset';
             google?: 'set' | 'unset';
             vscodeLMCount?: number;
+            defaultModel?: string;
+            language?: string;
           };
           const hasAnyKey = p.openai === 'set' || p.anthropic === 'set' || p.google === 'set';
           const hasVscodeLM = (p.vscodeLMCount ?? 0) > 0;
+
+          if (p.language) {
+            const targetLang = p.language === 'auto'
+              ? ((window as unknown as { __AAO_LANG__?: string }).__AAO_LANG__ ?? 'en')
+              : p.language;
+            if (i18n.language !== targetLang) {
+              void i18n.changeLanguage(targetLang);
+            }
+          }
+
           setState((s) => ({
             ...s,
             ...(p.availableModels ? { availableModels: p.availableModels } : {}),
+            ...(p.defaultModel ? { defaultModel: p.defaultModel } : {}),
             noApiKeys: !hasAnyKey && !hasVscodeLM,
           }));
           break;
@@ -363,5 +379,6 @@ export function useWorkflowState() {
     streamingChunks: state.streamingChunks,
     toolEvents: state.toolEvents,
     availableModels: state.availableModels,
+    defaultModel: state.defaultModel,
   };
 }

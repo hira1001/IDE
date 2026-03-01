@@ -7,6 +7,7 @@ import { MetaAIService } from './services/metaAIService.js';
 import { TemplateManager } from './services/templateManager.js';
 import { FileContextProvider } from './services/fileContextProvider.js';
 import { ProjectContextProvider } from './services/projectContextProvider.js';
+import { PlanDelivery } from './services/planDelivery.js';
 import { ApiKeys } from './llm/gateway.js';
 import { TextEncoder, TextDecoder } from 'util';
 import {
@@ -47,7 +48,8 @@ const ANTHROPIC_MODELS = [
 ];
 
 const GOOGLE_MODELS = [
-  'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-2.0-flash-thinking-exp', 'gemini-2.0-pro-exp', 'gemini-2.5-pro-exp-03-25',
+  'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.5-pro-exp-03-25',
+  'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-2.0-flash-thinking-exp', 'gemini-2.0-pro-exp',
   'gemini-1.5-pro', 'gemini-1.5-pro-002', 'gemini-1.5-flash', 'gemini-1.5-flash-002', 'gemini-1.5-flash-8b',
   'gemini-1.0-pro', 'gemini-ultra',
 ];
@@ -355,11 +357,7 @@ async function handleWebviewMessage(
 
     case 'workflow:dryrun': {
       const payload = message.payload as ExecuteWorkflowPayload;
-      const source = fileContextProvider.getActiveFileSnapshot();
-      if (!source) {
-        vscode.window.showWarningMessage('AI Agent: Open a file in the editor before running Dry Run.');
-        break;
-      }
+      const source = fileContextProvider.getActiveFileSnapshot() ?? { filename: 'unknown', content: '', language_id: 'plaintext', line_count: 0, byte_size: 0 };
       const dryRunner = new DryRunner();
       const result = dryRunner.run(payload.config, source);
       postMessage({ type: 'workflow:dryrun', payload: { result } });
@@ -630,6 +628,73 @@ async function handleWebviewMessage(
       break;
     }
 
+    case 'settings:save_language': {
+      const p = message.payload as { language: string };
+      await vscode.workspace
+        .getConfiguration('aiAgentOrchestrator')
+        .update('language', p.language, vscode.ConfigurationTarget.Global);
+      const updated = await buildSettingsCurrent(context);
+      postMessage({ type: 'settings:current', payload: updated });
+      break;
+    }
+
+    case 'plan:generate': {
+      const p = message.payload as { prompt: string; config?: import('./types/index.js').WorkflowConfig };
+      try {
+        const cfg = vscode.workspace.getConfiguration('aiAgentOrchestrator');
+        const apiKeys = await getApiKeys(context);
+        const defaultModel = cfg.get<string>('defaultModel') || 'gpt-4o';
+        const metaAI = new MetaAIService(apiKeys, defaultModel);
+
+        const savedLang = cfg.get<string>('language') || 'auto';
+        const targetLanguage = savedLang === 'auto' ? vscode.env.language : savedLang;
+        const markdown = await metaAI.generatePlan(p.prompt, targetLanguage, p.config);
+
+        const skipPreview = cfg.get<boolean>('planSkipPreview') || false;
+        if (skipPreview) {
+          // Skip preview: directly copy + save + notify
+          const delivery = new PlanDelivery();
+          await delivery.sendToAI(markdown);
+          postMessage({ type: 'plan:generated', payload: { markdown, skipped: true } });
+        } else {
+          postMessage({ type: 'plan:generated', payload: { markdown } });
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        postMessage({ type: 'plan:error', payload: { error: msg } });
+      }
+      break;
+    }
+
+    case 'plan:copy': {
+      const p = message.payload as { markdown: string };
+      const delivery = new PlanDelivery();
+      await delivery.copyToClipboard(p.markdown);
+      break;
+    }
+
+    case 'plan:sendToAI': {
+      const p = message.payload as { markdown: string };
+      const delivery = new PlanDelivery();
+      await delivery.sendToAI(p.markdown);
+      break;
+    }
+
+    case 'plan:saveTemplate': {
+      const p = message.payload as { markdown: string };
+      try {
+        await templateManager.save({
+          name: 'Workflow Plan',
+          description: 'Auto-saved workflow plan',
+          tags: ['plan', 'auto'],
+          config: { agents: [], workflow: [], _planMarkdown: p.markdown } as any,
+        });
+      } catch (err) {
+        console.warn('[Extension] Failed to save plan template:', err);
+      }
+      break;
+    }
+
     default:
       console.warn('[Extension] Unknown message type:', message.type);
   }
@@ -656,7 +721,10 @@ async function handleGenerateWorkflow(
     const config = vscode.workspace.getConfiguration('aiAgentOrchestrator');
     const defaultModel = config.get<string>('defaultModel', 'gpt-4o') as import('./types/index.js').LLMModel;
     const metaAI = new MetaAIService(apiKeys, defaultModel);
-    const workflowConfig = await metaAI.generateWorkflow(payload.instruction, source);
+
+    const savedLang = config.get<string>('language') || 'auto';
+    const targetLanguage = savedLang === 'auto' ? vscode.env.language : savedLang;
+    const workflowConfig = await metaAI.generateWorkflow(payload.instruction, source, targetLanguage);
 
     postMessage({ type: 'workflow:generate', payload: { status: 'done', config: workflowConfig } });
   } catch (err) {
@@ -678,14 +746,8 @@ async function handleExecuteWorkflow(
   const projectCtx = await projectContextProvider.buildProjectContext(workspaceRoot, opts);
   const source = projectCtx.activeFile;
 
-  if (!source) {
-    vscode.window.showWarningMessage('AI Agent: Please open a file in the editor before running.');
-    postMessage({ type: 'workflow:execute', payload: { status: 'error', error: 'No active editor.' } });
-    return;
-  }
-
   // Validate before execution
-  const errors = validateWorkflow(payload.config, source, apiKeys);
+  const errors = validateWorkflow(payload.config, source ?? { filename: 'unknown', content: '', language_id: 'plaintext', line_count: 0, byte_size: 0 }, apiKeys);
   const hasErrors = errors.some((e) => e.type === 'error');
 
   if (hasErrors) {
@@ -830,9 +892,9 @@ async function getApiKeys(context: vscode.ExtensionContext): Promise<ApiKeys> {
 
 async function configureApiKeys(context: vscode.ExtensionContext): Promise<void> {
   const providers = [
-    { id: 'openai',    name: 'OpenAI',    secretKey: 'aiAgentOrchestrator.openaiKey',    placeholder: 'sk-...' },
+    { id: 'openai', name: 'OpenAI', secretKey: 'aiAgentOrchestrator.openaiKey', placeholder: 'sk-...' },
     { id: 'anthropic', name: 'Anthropic', secretKey: 'aiAgentOrchestrator.anthropicKey', placeholder: 'sk-ant-...' },
-    { id: 'google',    name: 'Google AI', secretKey: 'aiAgentOrchestrator.googleKey',    placeholder: 'AIza...' },
+    { id: 'google', name: 'Google AI', secretKey: 'aiAgentOrchestrator.googleKey', placeholder: 'AIza...' },
   ];
 
   const items = await Promise.all(providers.map(async (p) => {
@@ -873,6 +935,19 @@ async function configureApiKeys(context: vscode.ExtensionContext): Promise<void>
 
 // ─── Settings Helpers ─────────────────────────────────────────────────────────
 
+// Interface matches what SettingsModal expects
+interface SettingsCurrent {
+  openai: 'set' | 'unset';
+  anthropic: 'set' | 'unset';
+  google: 'set' | 'unset';
+  ollamaEndpoint: string;
+  vscodeLMCount: number;
+  availableModels: AvailableModels;
+  defaultModel: string;
+  language: string;
+}
+
+
 async function getAvailableModels(
   openaiKey: string | undefined,
   anthropicKey: string | undefined,
@@ -893,23 +968,15 @@ async function getAvailableModels(
   const vscodeLMModels = await listVscodeLMModels(vscode as unknown as VscodeLMApi);
 
   return {
-    openai:    openaiKey    ? OPENAI_MODELS    : [],
+    openai: openaiKey ? OPENAI_MODELS : [],
     anthropic: anthropicKey ? ANTHROPIC_MODELS : [],
-    google:    googleKey    ? GOOGLE_MODELS    : [],
-    ollama:    ollamaModels,
-    vscodeLM:  vscodeLMModels,
+    google: googleKey ? GOOGLE_MODELS : [],
+    ollama: ollamaModels,
+    vscodeLM: vscodeLMModels,
   };
 }
 
-async function buildSettingsCurrent(context: vscode.ExtensionContext): Promise<{
-  openai: 'set' | 'unset';
-  anthropic: 'set' | 'unset';
-  google: 'set' | 'unset';
-  ollamaEndpoint: string;
-  vscodeLMCount: number;
-  defaultModel: string;
-  availableModels: AvailableModels;
-}> {
+async function buildSettingsCurrent(context: vscode.ExtensionContext): Promise<SettingsCurrent> {
   const [openaiKey, anthropicKey, googleKey] = await Promise.all([
     safeSecretsGet(context, 'aiAgentOrchestrator.openaiKey'),
     safeSecretsGet(context, 'aiAgentOrchestrator.anthropicKey'),
@@ -918,15 +985,17 @@ async function buildSettingsCurrent(context: vscode.ExtensionContext): Promise<{
   const cfg = vscode.workspace.getConfiguration('aiAgentOrchestrator');
   const ollamaEndpoint = cfg.get<string>('ollamaEndpoint', 'http://localhost:11434');
   const defaultModel = cfg.get<string>('defaultModel', 'gpt-4o');
+  const language = cfg.get<string>('language', 'auto');
   const availableModels = await getAvailableModels(openaiKey, anthropicKey, googleKey, ollamaEndpoint);
   const vscodeLMCount = availableModels.vscodeLM.length;
   return {
-    openai:    openaiKey    ? 'set' : 'unset',
+    openai: openaiKey ? 'set' : 'unset',
     anthropic: anthropicKey ? 'set' : 'unset',
-    google:    googleKey    ? 'set' : 'unset',
+    google: googleKey ? 'set' : 'unset',
     ollamaEndpoint,
     vscodeLMCount,
     defaultModel,
+    language,
     availableModels,
   };
 }
@@ -939,9 +1008,9 @@ async function autoUpdateDefaultModel(
   const cfg = vscode.workspace.getConfiguration('aiAgentOrchestrator');
   const currentDefault = cfg.get<string>('defaultModel', 'gpt-4o');
 
-  const isOpenAI    = OPENAI_MODELS.includes(currentDefault) || currentDefault.startsWith('gpt-') || currentDefault.startsWith('o1') || currentDefault.startsWith('o3');
+  const isOpenAI = OPENAI_MODELS.includes(currentDefault) || currentDefault.startsWith('gpt-') || currentDefault.startsWith('o1') || currentDefault.startsWith('o3');
   const isAnthropic = ANTHROPIC_MODELS.includes(currentDefault) || currentDefault.startsWith('claude-');
-  const isGoogle    = GOOGLE_MODELS.includes(currentDefault) || currentDefault.startsWith('gemini-');
+  const isGoogle = GOOGLE_MODELS.includes(currentDefault) || currentDefault.startsWith('gemini-');
 
   const [openaiKey, anthropicKey, googleKey] = await Promise.all([
     safeSecretsGet(context, 'aiAgentOrchestrator.openaiKey'),
@@ -956,9 +1025,9 @@ async function autoUpdateDefaultModel(
 
   // Auto-set to the flagship model of the newly saved provider
   const firstModelMap: Record<string, string> = {
-    openai:    'gpt-4o',
+    openai: 'gpt-4o',
     anthropic: 'claude-sonnet-4-6',
-    google:    'gemini-2.0-flash',
+    google: 'gemini-2.0-flash',
   };
   const newDefault = firstModelMap[savedProvider];
   if (newDefault) {
@@ -1014,6 +1083,10 @@ function getWebviewHtml(context: vscode.ExtensionContext, webview: vscode.Webvie
 
   const nonce = generateNonce();
 
+  const cfg = vscode.workspace.getConfiguration('aiAgentOrchestrator');
+  const savedLang = cfg.get<string>('language') || 'auto';
+  const resolvedLang = savedLang === 'auto' ? vscode.env.language : savedLang;
+
   return /* html */ `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1032,6 +1105,9 @@ function getWebviewHtml(context: vscode.ExtensionContext, webview: vscode.Webvie
 </head>
 <body>
   <div id="root"></div>
+  <script nonce="${nonce}">
+    window.__AAO_LANG__ = '${resolvedLang}';
+  </script>
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;

@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useWorkflowState } from './hooks/useWorkflowState.js';
+import { useVSCode } from './hooks/useVSCode.js';
 import { PipelineView } from './components/PipelineView.js';
 import { ExecutionBar } from './components/ExecutionBar.js';
 import { DryRunPanel } from './components/DryRunPanel.js';
@@ -9,6 +10,7 @@ import { TemplateSaveDialog } from './components/TemplateSaveDialog.js';
 import { TemplateSelector } from './components/TemplateSelector.js';
 import { ToastContainer, ToastItem } from './components/Toast.js';
 import { SettingsModal } from './components/SettingsModal.js';
+import { PlanPreview } from './components/PlanPreview.js';
 import { WorkflowTemplate, ProjectContextSummary, SourceInput } from '../types/index.js';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -30,8 +32,8 @@ function ContextIndicator({ summary, source, onToggleMode, onRefresh }: ContextI
     return (
       <div className="source-indicator source-indicator--empty">
         <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
-          <circle cx="6.5" cy="6.5" r="5.5" stroke="currentColor" strokeWidth="1.3"/>
-          <path d="M6.5 4v3.5M6.5 9v.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+          <circle cx="6.5" cy="6.5" r="5.5" stroke="currentColor" strokeWidth="1.3" />
+          <path d="M6.5 4v3.5M6.5 9v.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
         </svg>
         {t('app.noSource')}
       </div>
@@ -53,13 +55,13 @@ function ContextIndicator({ summary, source, onToggleMode, onRefresh }: ContextI
         {isProject ? (
           // Folder icon for project mode
           <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
-            <path d="M1.5 3h3.5l1 1.5H11.5v6H1.5V3z" stroke="currentColor" strokeWidth="1.2" fill="none"/>
+            <path d="M1.5 3h3.5l1 1.5H11.5v6H1.5V3z" stroke="currentColor" strokeWidth="1.2" fill="none" />
           </svg>
         ) : (
           // File icon for file mode
           <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
-            <path d="M2 2h7l2 2v7H2V2z" stroke="currentColor" strokeWidth="1.3"/>
-            <path d="M5 5.5h3M5 7.5h2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+            <path d="M2 2h7l2 2v7H2V2z" stroke="currentColor" strokeWidth="1.3" />
+            <path d="M5 5.5h3M5 7.5h2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
           </svg>
         )}
         <span className="source-indicator__mode-label">{isProject ? 'Project' : 'File'}</span>
@@ -112,6 +114,7 @@ function ContextIndicator({ summary, source, onToggleMode, onRefresh }: ContextI
 
 export function App() {
   const { t } = useTranslation();
+  const { postMessage } = useVSCode();
   const {
     config,
     executionState,
@@ -125,6 +128,7 @@ export function App() {
     streamingChunks,
     toolEvents,
     availableModels,
+    defaultModel,
     generateWorkflow,
     dismissNoApiKeys,
     executeWorkflow,
@@ -228,6 +232,53 @@ export function App() {
     generateWorkflow(instruction);
   };
 
+  // ── Plan Mode ─────────────────────────────────────────────
+  const [planMarkdown, setPlanMarkdown] = useState<string | null>(null);
+  const [showPlanPreview, setShowPlanPreview] = useState(false);
+  const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
+
+  const handleGeneratePlan = useCallback(() => {
+    if (!config) return;
+    if (noApiKeys) { setShowSettings(true); return; }
+    setIsGeneratingPlan(true);
+    postMessage({ type: 'plan:generate', payload: { prompt: instruction, config } });
+  }, [instruction, config, noApiKeys, postMessage]);
+
+  // Listen for plan results from extension
+  React.useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      const msg = event.data;
+      if (msg.type === 'plan:generated') {
+        setPlanMarkdown(msg.payload.markdown);
+        setIsGeneratingPlan(false);
+        if (msg.payload.skipped) {
+          addToast('✅ 計画書をクリップボードにコピーしました。AIに貼り付けてください。', 'info');
+        } else {
+          setShowPlanPreview(true);
+        }
+      } else if (msg.type === 'plan:error') {
+        addToast(`Plan generation failed: ${msg.payload.error}`, 'error');
+        setIsGeneratingPlan(false);
+      }
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, [addToast]);
+
+  const handlePlanCopy = useCallback((md: string) => {
+    postMessage({ type: 'plan:copy', payload: { markdown: md } });
+    addToast('📋 クリップボードにコピーしました', 'info');
+  }, [postMessage, addToast]);
+
+  const handlePlanSendToAI = useCallback((md: string) => {
+    postMessage({ type: 'plan:sendToAI', payload: { markdown: md } });
+  }, [postMessage]);
+
+  const handlePlanSaveTemplate = useCallback((md: string) => {
+    postMessage({ type: 'plan:saveTemplate', payload: { markdown: md } });
+    addToast('💾 テンプレートとして保存しました', 'info');
+  }, [postMessage, addToast]);
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     // Ctrl+Enter / Cmd+Enter shortcuts work from anywhere (intended for the instruction textarea)
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
@@ -318,13 +369,13 @@ export function App() {
         <div className="app__header-brand">
           <div className="app__logo" aria-hidden="true">
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-              <circle cx="10" cy="10" r="9" stroke="url(#logoGrad)" strokeWidth="1.5"/>
-              <circle cx="10" cy="6.5" r="2.5" fill="url(#logoGrad)"/>
-              <path d="M5.5 15c0-2.49 2.01-4.5 4.5-4.5s4.5 2.01 4.5 4.5" stroke="url(#logoGrad)" strokeWidth="1.5" strokeLinecap="round"/>
+              <circle cx="10" cy="10" r="9" stroke="url(#logoGrad)" strokeWidth="1.5" />
+              <circle cx="10" cy="6.5" r="2.5" fill="url(#logoGrad)" />
+              <path d="M5.5 15c0-2.49 2.01-4.5 4.5-4.5s4.5 2.01 4.5 4.5" stroke="url(#logoGrad)" strokeWidth="1.5" strokeLinecap="round" />
               <defs>
                 <linearGradient id="logoGrad" x1="2" y1="2" x2="18" y2="18" gradientUnits="userSpaceOnUse">
-                  <stop stopColor="#818cf8"/>
-                  <stop offset="1" stopColor="#38bdf8"/>
+                  <stop stopColor="#818cf8" />
+                  <stop offset="1" stopColor="#38bdf8" />
                 </linearGradient>
               </defs>
             </svg>
@@ -363,8 +414,8 @@ export function App() {
             aria-label="Open Settings"
           >
             <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
-              <circle cx="7.5" cy="7.5" r="2.5" stroke="currentColor" strokeWidth="1.3"/>
-              <path d="M7.5 1v1.5M7.5 12.5V14M1 7.5h1.5M12.5 7.5H14M2.96 2.96l1.06 1.06M10.98 10.98l1.06 1.06M2.96 12.04l1.06-1.06M10.98 4.02l1.06-1.06" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+              <circle cx="7.5" cy="7.5" r="2.5" stroke="currentColor" strokeWidth="1.3" />
+              <path d="M7.5 1v1.5M7.5 12.5V14M1 7.5h1.5M12.5 7.5H14M2.96 2.96l1.06 1.06M10.98 10.98l1.06 1.06M2.96 12.04l1.06-1.06M10.98 4.02l1.06-1.06" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
             </svg>
           </button>
           <button
@@ -374,7 +425,7 @@ export function App() {
             aria-label={t('app.loadTemplate')}
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <path d="M2 3.5C2 2.67 2.67 2 3.5 2h3l2 2h4c.83 0 1.5.67 1.5 1.5v7c0 .83-.67 1.5-1.5 1.5h-9.5C2.67 14 2 13.33 2 12.5v-9z" stroke="currentColor" strokeWidth="1.4"/>
+              <path d="M2 3.5C2 2.67 2.67 2 3.5 2h3l2 2h4c.83 0 1.5.67 1.5 1.5v7c0 .83-.67 1.5-1.5 1.5h-9.5C2.67 14 2 13.33 2 12.5v-9z" stroke="currentColor" strokeWidth="1.4" />
             </svg>
           </button>
           {config && (
@@ -385,9 +436,9 @@ export function App() {
               aria-label={t('app.saveTemplate')}
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <path d="M3 3h8l2 2v8H3V3z" stroke="currentColor" strokeWidth="1.4"/>
-                <rect x="5.5" y="3" width="4" height="3.5" rx="0.5" stroke="currentColor" strokeWidth="1.2"/>
-                <path d="M5 10h6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+                <path d="M3 3h8l2 2v8H3V3z" stroke="currentColor" strokeWidth="1.4" />
+                <rect x="5.5" y="3" width="4" height="3.5" rx="0.5" stroke="currentColor" strokeWidth="1.2" />
+                <path d="M5 10h6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
               </svg>
             </button>
           )}
@@ -399,7 +450,7 @@ export function App() {
               aria-label={t('app.clearWorkflow') || 'Clear workflow'}
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+                <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
               </svg>
             </button>
           )}
@@ -410,8 +461,8 @@ export function App() {
       {noApiKeys && (
         <div className="onboarding-banner" role="alert">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-            <circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.3"/>
-            <path d="M7 4v3.5M7 9.5v.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+            <circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.3" />
+            <path d="M7 4v3.5M7 9.5v.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
           </svg>
           <span>{t('app.noApiKeysMsg') || 'No API key configured. Click ⚙ Settings to add your API keys.'}</span>
           <button
@@ -453,9 +504,12 @@ export function App() {
               {isGenerating ? (
                 <span className="chat-send-btn__spinner" />
               ) : (
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                  <path d="M14 8L2 2l3 6-3 6 12-6z" fill="currentColor"/>
-                </svg>
+                <>
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
+                    <path d="M14 8L2 2l3 6-3 6 12-6z" fill="currentColor" />
+                  </svg>
+                  <span className="chat-send-btn__label">{t('app.generate') || 'Generate Workflow'}</span>
+                </>
               )}
             </button>
             <button
@@ -466,10 +520,11 @@ export function App() {
               title="Generate workflow and run it immediately (Ctrl+Shift+Enter)"
             >
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-                <path d="M2.5 2l10 5-10 5V2z" fill="currentColor"/>
+                <path d="M2.5 2l10 5-10 5V2z" fill="currentColor" />
               </svg>
               <span className="chat-run-btn__label">{t('app.generateAndRun') || 'Generate & Run'}</span>
             </button>
+
           </div>
         </div>
         <div className="chat-input-hint">
@@ -498,8 +553,8 @@ export function App() {
         {generationError && (
           <div className="error-message" role="alert">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-              <circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.3"/>
-              <path d="M7 4.5v3M7 9.5v.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+              <circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.3" />
+              <path d="M7 4.5v3M7 9.5v.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
             </svg>
             <span>{displayError}</span>
             {generationError.length > ERROR_MAX_LEN && (
@@ -542,6 +597,27 @@ export function App() {
         onRefresh={refreshContext}
       />
 
+      {/* ── Execution Bar (Action Buttons) ──────── */}
+      {config && (
+        <ExecutionBar
+          status={status}
+          dryRunResult={dryRunResult}
+          totalCost={totalCost}
+          currentStep={executionState?.current_step}
+          totalSteps={config.workflow.length}
+          completedTasks={completedTasks}
+          totalTasks={totalTasks}
+          onPreview={handlePreview}
+          onRun={handleRun}
+          onStop={abortWorkflow}
+          onResume={resumeFromPause}
+          onSaveTemplate={() => setShowSaveDialog(true)}
+          onRerunFromStep={config ? (fromStep) => executeFromStep(config, fromStep) : undefined}
+          onGeneratePlan={handleGeneratePlan}
+          isGeneratingPlan={isGeneratingPlan}
+        />
+      )}
+
       {/* ── Pipeline ────────────────────────────── */}
       {config && (
         <PipelineView
@@ -551,6 +627,7 @@ export function App() {
           streamingChunks={streamingChunks}
           toolEvents={toolEvents}
           availableModels={availableModels}
+          defaultModel={defaultModel}
           onChange={setConfig}
           onRetryTask={(taskId) => retryTask(taskId, config)}
           onToast={addToast}
@@ -562,13 +639,13 @@ export function App() {
         <div className="empty-state">
           <div className="empty-state__icon" aria-hidden="true">
             <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-              <circle cx="24" cy="24" r="22" stroke="currentColor" strokeWidth="1.5" opacity="0.2"/>
-              <circle cx="24" cy="18" r="6" stroke="currentColor" strokeWidth="1.5" opacity="0.5"/>
-              <path d="M12 38c0-6.63 5.37-12 12-12s12 5.37 12 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" opacity="0.5"/>
-              <circle cx="38" cy="16" r="4" stroke="currentColor" strokeWidth="1.2" opacity="0.3"/>
-              <path d="M35 23c0-3.31 2.69-6 6-6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" opacity="0.3"/>
-              <circle cx="10" cy="16" r="4" stroke="currentColor" strokeWidth="1.2" opacity="0.3"/>
-              <path d="M7 23c0-3.31 2.69-6 6-6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" opacity="0.3" transform="scale(-1,1) translate(-20,0)"/>
+              <circle cx="24" cy="24" r="22" stroke="currentColor" strokeWidth="1.5" opacity="0.2" />
+              <circle cx="24" cy="18" r="6" stroke="currentColor" strokeWidth="1.5" opacity="0.5" />
+              <path d="M12 38c0-6.63 5.37-12 12-12s12 5.37 12 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" opacity="0.5" />
+              <circle cx="38" cy="16" r="4" stroke="currentColor" strokeWidth="1.2" opacity="0.3" />
+              <path d="M35 23c0-3.31 2.69-6 6-6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" opacity="0.3" />
+              <circle cx="10" cy="16" r="4" stroke="currentColor" strokeWidth="1.2" opacity="0.3" />
+              <path d="M7 23c0-3.31 2.69-6 6-6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" opacity="0.3" transform="scale(-1,1) translate(-20,0)" />
             </svg>
           </div>
           <p className="empty-state__text">{t('app.emptyState')}</p>
@@ -588,29 +665,29 @@ export function App() {
                   {prompt}
                 </button>
               ))}
+              <div style={{ width: '100%', borderTop: '1px solid var(--vscode-widget-border, rgba(128,128,128,0.2))', margin: '8px 0' }} />
+              <button
+                className="btn btn--secondary"
+                style={{ alignSelf: 'center', marginTop: 4 }}
+                onClick={() => {
+                  setConfig({
+                    agents: [],
+                    workflow: [{
+                      step: 1,
+                      type: 'parallel',
+                      pause_after: false,
+                      tasks: []
+                    }]
+                  });
+                }}
+              >
+                + {t('app.createBlankWorkflow') || 'Create Blank Workflow'}
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── Execution Bar (sticky footer) ──────── */}
-      {config && (
-        <ExecutionBar
-          status={status}
-          dryRunResult={dryRunResult}
-          totalCost={totalCost}
-          currentStep={executionState?.current_step}
-          totalSteps={config.workflow.length}
-          completedTasks={completedTasks}
-          totalTasks={totalTasks}
-          onPreview={handlePreview}
-          onRun={handleRun}
-          onStop={abortWorkflow}
-          onResume={resumeFromPause}
-          onSaveTemplate={() => setShowSaveDialog(true)}
-          onRerunFromStep={config ? (fromStep) => executeFromStep(config, fromStep) : undefined}
-        />
-      )}
 
       {/* ── Overlay panels ───────────────────── */}
       {dryRunResult && (
@@ -701,6 +778,17 @@ export function App() {
       {/* ── Settings modal ───────────────────── */}
       {showSettings && (
         <SettingsModal onClose={() => setShowSettings(false)} />
+      )}
+
+      {/* ── Plan Preview modal ─────────────── */}
+      {showPlanPreview && planMarkdown && (
+        <PlanPreview
+          markdown={planMarkdown}
+          onClose={() => setShowPlanPreview(false)}
+          onCopy={handlePlanCopy}
+          onSendToAI={handlePlanSendToAI}
+          onSaveTemplate={handlePlanSaveTemplate}
+        />
       )}
 
       {/* ── Toast notifications ─────────────── */}

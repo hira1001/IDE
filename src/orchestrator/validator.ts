@@ -25,13 +25,7 @@ export function validateWorkflow(
     return errors; // Nothing else to validate
   }
 
-  // Check active editor / source
-  if (!source) {
-    errors.push({
-      type: 'error',
-      message: 'No active editor found. Please open a file before running.',
-    });
-  }
+
 
   if (source && source.byte_size > 100 * 1024) {
     errors.push({

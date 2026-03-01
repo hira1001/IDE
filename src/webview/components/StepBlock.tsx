@@ -16,9 +16,13 @@ interface StepBlockProps {
   /** Tool call events per task_id for agentic tasks. */
   toolEvents?: Record<string, Array<{ event_type: string; tool_name?: string; content?: string; iteration?: number }>>;
   availableModels?: AvailableModels;
+  defaultModel: string;
   onUpdateStep: (step: WorkflowStep) => void;
+  onUpdateAgent: (agent: Agent) => void;
+  onAddAgentAndTask: (task: Task, agent: Agent) => void;
   onDeleteStep: () => void;
   onRetryTask: (taskId: string) => void;
+  onMoveTask?: (sourceStepIndex: number, sourceTaskIndex: number, targetStepIndex: number, targetTaskIndex: number) => void;
   onToast?: (message: string, type: 'success' | 'error' | 'info') => void;
   onOpenSettings?: () => void;
 }
@@ -29,37 +33,68 @@ const STEP_TYPE_LABELS: Record<WorkflowStep['type'], string> = {
 
 export function StepBlock({
   step, stepIndex, config, taskStates, outputStore, streamingChunks, toolEvents,
-  availableModels, onUpdateStep, onDeleteStep, onRetryTask, onToast, onOpenSettings,
+  availableModels, defaultModel, onUpdateStep, onUpdateAgent, onAddAgentAndTask, onDeleteStep, onRetryTask, onMoveTask, onToast, onOpenSettings,
 }: StepBlockProps) {
   const { t } = useTranslation();
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
-  const handleDragStart = (index: number) => setDragIndex(index);
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDragIndex(index);
+    e.dataTransfer.setData('application/json', JSON.stringify({ stepIndex, taskIndex: index }));
+    e.dataTransfer.effectAllowed = 'move';
+  };
   const handleDragOver = (e: React.DragEvent, index: number) => {
     e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
     setDragOverIndex(index);
   };
   const handleDrop = (e: React.DragEvent, dropIndex: number) => {
     e.preventDefault();
-    if (dragIndex !== null && dragIndex !== dropIndex) {
-      const newTasks = [...step.tasks];
-      const [removed] = newTasks.splice(dragIndex, 1);
-      newTasks.splice(dropIndex, 0, removed);
-      onUpdateStep({ ...step, tasks: newTasks });
-    }
     setDragIndex(null);
     setDragOverIndex(null);
+    try {
+      const dataStr = e.dataTransfer.getData('application/json');
+      if (!dataStr) return;
+      const data = JSON.parse(dataStr);
+      if (data && data.stepIndex !== undefined && data.taskIndex !== undefined) {
+        if (data.stepIndex === stepIndex) {
+          // intra-step reorder
+          if (data.taskIndex !== dropIndex) {
+            const newTasks = [...step.tasks];
+            const [removed] = newTasks.splice(data.taskIndex, 1);
+            newTasks.splice(dropIndex, 0, removed);
+            onUpdateStep({ ...step, tasks: newTasks });
+          }
+        } else {
+          // cross-step move
+          onMoveTask?.(data.stepIndex, data.taskIndex, stepIndex, dropIndex);
+        }
+      }
+    } catch (err) {
+      // ignore
+    }
   };
   const handleDragEnd = () => {
     setDragIndex(null);
     setDragOverIndex(null);
   };
 
+  const handleContainerDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleContainerDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    // Drop logic relative to the end of the list if not dropped specifically on a card
+    handleDrop(e, step.tasks.length);
+  };
+
   // Compute aggregate step status for styling
   const tasks = step.tasks;
   const allDone = tasks.length > 0 && tasks.every((t) => taskStates[t.task_id]?.status === 'completed');
-  const anyRunning = tasks.some((t) => ['running','validating','retrying'].includes(taskStates[t.task_id]?.status ?? ''));
+  const anyRunning = tasks.some((t) => ['running', 'validating', 'retrying'].includes(taskStates[t.task_id]?.status ?? ''));
   const anyError = tasks.some((t) => taskStates[t.task_id]?.status === 'error');
 
   const stepClass = allDone ? 'step-block--done' : anyError ? 'step-block--error' : anyRunning ? 'step-block--active' : '';
@@ -69,8 +104,7 @@ export function StepBlock({
   };
 
   const updateAgent = (agentId: string, updatedAgent: Agent) => {
-    const event = new CustomEvent('aao:update-agent', { detail: { agentId, updatedAgent }, bubbles: true });
-    document.dispatchEvent(event);
+    onUpdateAgent(updatedAgent);
   };
 
   const deleteTask = (taskId: string) => {
@@ -79,19 +113,19 @@ export function StepBlock({
 
   const addTask = () => {
     const newAgentId = `agent_${uuidv4().slice(0, 6)}`;
-    const newTaskId  = `task_${uuidv4().slice(0, 6)}`;
-    document.dispatchEvent(new CustomEvent('aao:add-agent', {
-      detail: { agent: { id: newAgentId, name: 'New Agent', persona: 'A helpful AI assistant.', model: 'gpt-4o' } },
-      bubbles: true,
-    }));
+    const newTaskId = `task_${uuidv4().slice(0, 6)}`;
+    const newAgent: Agent = { id: newAgentId, name: 'New Agent', persona: 'A helpful AI assistant.', model: defaultModel as any };
     const newTask: Task = {
       task_id: newTaskId, agent_id: newAgentId, task_name: 'New Task',
       instructions: [''], constraints: [], output_format: 'Markdown',
       output_key: `out_${newTaskId}`,
-      input_mapping: [{ from_step: 0, from_agent_id: '__source__', label: 'Source file' }],
+      input_mapping: [{ from_step: 0, from_agent_id: '__project__', label: 'Project context' }],
       enable_handover_note: false,
+      use_tools: true,
+      auto_apply_edits: true,
+      max_tool_iterations: 15,
     };
-    onUpdateStep({ ...step, tasks: [...step.tasks, newTask] });
+    onAddAgentAndTask(newTask, newAgent);
   };
 
   const isParallel = step.type === 'parallel';
@@ -256,7 +290,11 @@ export function StepBlock({
       )}
 
       {/* Cards */}
-      <div className={`step-block__cards ${isParallel ? 'step-block__cards--parallel' : ''}`}>
+      <div
+        className={`step-block__cards ${isParallel ? 'step-block__cards--parallel' : ''}`}
+        onDragOver={handleContainerDragOver}
+        onDrop={handleContainerDrop}
+      >
         {step.tasks.map((task, taskIndex) => {
           const agent = config.agents.find((a) => a.id === task.agent_id);
           if (!agent) return null;

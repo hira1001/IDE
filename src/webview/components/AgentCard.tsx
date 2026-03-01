@@ -42,7 +42,7 @@ interface AgentCardProps {
   // Drag & drop
   taskIndex?: number;
   isDragOver?: boolean;
-  onDragStart?: (index: number) => void;
+  onDragStart?: (e: React.DragEvent, index: number) => void;
   onDragOver?: (e: React.DragEvent, index: number) => void;
   onDrop?: (e: React.DragEvent, index: number) => void;
   onDragEnd?: () => void;
@@ -67,12 +67,6 @@ export function AgentCard({
   const [elapsed, setElapsed] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const streamingRef = useRef<HTMLDivElement>(null);
-  // Start in custom-input mode if current model isn't in any known group
-  const [useCustomModel, setUseCustomModel] = useState(() => {
-    const m = availableModels ?? EMPTY_AVAILABLE_MODELS;
-    const known = [...m.openai, ...m.anthropic, ...m.google, ...m.ollama, ...m.vscodeLM];
-    return known.length > 0 && !known.includes(agent.model);
-  });
 
   // Fullscreen instruction modal
   const [showInstructionModal, setShowInstructionModal] = useState(false);
@@ -134,11 +128,11 @@ export function AgentCard({
   const groupedModels = useMemo(() => {
     const m = effectiveAvailableModels;
     const groups: { label: string; models: string[] }[] = [];
-    if (m.openai.length)    groups.push({ label: 'OpenAI',       models: m.openai });
-    if (m.anthropic.length) groups.push({ label: 'Anthropic',    models: m.anthropic });
-    if (m.google.length)    groups.push({ label: 'Google AI',    models: m.google });
-    if (m.ollama.length)    groups.push({ label: 'Local (Ollama)', models: m.ollama });
-    if (m.vscodeLM.length)  groups.push({ label: 'VS Code LM',   models: m.vscodeLM });
+    if (m.openai.length) groups.push({ label: 'OpenAI', models: m.openai });
+    if (m.anthropic.length) groups.push({ label: 'Anthropic', models: m.anthropic });
+    if (m.google.length) groups.push({ label: 'Google AI', models: m.google });
+    if (m.ollama.length) groups.push({ label: 'Local (Ollama)', models: m.ollama });
+    if (m.vscodeLM.length) groups.push({ label: 'VS Code LM', models: m.vscodeLM });
     return groups;
   }, [effectiveAvailableModels]);
 
@@ -253,8 +247,6 @@ export function AgentCard({
   return (
     <div
       className={`agent-card card--${status}${isDragOver ? ' agent-card--drag-over' : ''}`}
-      draggable
-      onDragStart={() => onDragStart?.(taskIndex ?? 0)}
       onDragOver={(e) => onDragOver?.(e, taskIndex ?? 0)}
       onDrop={(e) => onDrop?.(e, taskIndex ?? 0)}
       onDragEnd={onDragEnd}
@@ -268,7 +260,12 @@ export function AgentCard({
         aria-expanded={expanded}
         aria-label={`${agent.name}: ${task.task_name}`}
       >
-        <span className="agent-card__drag" title="Drag to reorder">⠿</span>
+        <span
+          className="agent-card__drag"
+          title="Drag to reorder"
+          draggable
+          onDragStart={(e) => { onDragStart?.(e, taskIndex ?? 0); }}
+        >⠿</span>
         <div className="agent-card__avatar">{initial}</div>
 
         <div className="agent-card__info">
@@ -297,7 +294,7 @@ export function AgentCard({
           {(status === 'completed' || status === 'error') && (
             <button className="card-mini-btn" onClick={onRetry} title={t('card.retry')} aria-label={t('card.retry')}>🔄</button>
           )}
-          <button className="card-mini-btn card-mini-btn--danger" onClick={onDelete} title="Delete" aria-label="Delete agent">✕</button>
+          <button className="card-mini-btn card-mini-btn--danger" onClick={onDelete} title="Delete" aria-label="Delete agent">🗑️</button>
         </div>
       </button>
 
@@ -406,7 +403,7 @@ export function AgentCard({
                       onClick={handleDraftInstruction}
                       disabled={!draftBrief.trim() || isDraftLoading}
                     >
-                      {isDraftLoading ? '⏳ Generating…' : '✨ Generate Instructions'}
+                      {isDraftLoading ? '⏳ Generating…' : !draftBrief.trim() ? '✨ Type a brief to generate' : '✨ Generate Instructions'}
                     </button>
                     {isDraftLoading && (
                       <span style={{ fontSize: 11, color: 'var(--aao-muted)' }}>
@@ -526,39 +523,21 @@ export function AgentCard({
               </div>
             </div>
 
-            {/* Model — dynamic grouped select or custom text input */}
+            {/* Model — custom text input with datalist */}
             <div className="field-group">
               <label className="field-label">{t('card.model')}</label>
-              {useCustomModel ? (
-                <div style={{ display: 'flex', gap: 4 }}>
-                  <input
-                    className="field-input"
-                    style={{ flex: 1 }}
-                    value={agent.model}
-                    onChange={(e) => onUpdateAgent({ ...agent, model: e.target.value })}
-                    placeholder="e.g. ollama:llama3.2, vscode:gpt-4o"
-                    autoFocus
-                  />
-                  <button
-                    className="btn btn--ghost btn--xs"
-                    onClick={() => setUseCustomModel(false)}
-                    title="Back to list"
-                  >← List</button>
-                </div>
-              ) : groupedModels.length > 0 ? (
-                <div style={{ display: 'flex', gap: 4 }}>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <select
                     className="field-select"
-                    style={{ flex: 1 }}
-                    value={groupedModels.some((g) => g.models.includes(agent.model)) ? agent.model : '__custom__'}
+                    value={groupedModels.flatMap(g => g.models).includes(agent.model) ? agent.model : '__custom__'}
                     onChange={(e) => {
-                      if (e.target.value === '__custom__') {
-                        setUseCustomModel(true);
-                        return;
-                      }
-                      onUpdateAgent({ ...agent, model: e.target.value as LLMModel });
+                      if (e.target.value !== '__custom__') onUpdateAgent({ ...agent, model: e.target.value as LLMModel });
                     }}
+                    style={{ width: '100%' }}
+                    disabled={groupedModels.length === 0}
                   >
+                    {groupedModels.length === 0 && <option value="__custom__">No models available</option>}
                     {groupedModels.map((g) => (
                       <optgroup key={g.label} label={g.label}>
                         {g.models.map((m) => (
@@ -566,18 +545,22 @@ export function AgentCard({
                         ))}
                       </optgroup>
                     ))}
-                    <option value="__custom__">Custom model name…</option>
+                    {groupedModels.length > 0 && <option value="__custom__">Custom Model...</option>}
                   </select>
+                  {!groupedModels.flatMap(g => g.models).includes(agent.model) && (
+                    <input
+                      className="field-input"
+                      value={agent.model}
+                      onChange={(e) => onUpdateAgent({ ...agent, model: e.target.value as LLMModel })}
+                      placeholder="Type custom model name (e.g. gemini-2.5-flash)"
+                      style={{ width: '100%' }}
+                      autoFocus
+                    />
+                  )}
                 </div>
-              ) : (
-                <div>
-                  <input
-                    className="field-input field-input--disabled"
-                    value=""
-                    disabled
-                    placeholder="No models available — configure API keys"
-                  />
-                  <div className="field-warning">
+
+                {groupedModels.length === 0 && (
+                  <div className="field-warning" style={{ marginTop: 6 }}>
                     ⚠ No models configured.{' '}
                     {onOpenSettings ? (
                       <button className="btn-link" onClick={onOpenSettings}>
@@ -587,8 +570,8 @@ export function AgentCard({
                       'Open Settings to add API keys.'
                     )}
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
 
             {/* Handover toggle */}
@@ -718,7 +701,7 @@ export function AgentCard({
 
               {editingOutput
                 ? <textarea className="field-textarea field-textarea--mono" rows={7}
-                    value={editedOutput} onChange={(e) => setEditedOutput(e.target.value)} />
+                  value={editedOutput} onChange={(e) => setEditedOutput(e.target.value)} />
                 : <div className="agent-card__output-preview">{output}</div>
               }
 

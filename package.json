@@ -78,15 +78,6 @@
           "default": "gpt-4o",
           "description": "%config.defaultModel%"
         },
-        "aiAgentOrchestrator.language": {
-          "type": "string",
-          "enum": [
-            "en",
-            "ja"
-          ],
-          "default": "en",
-          "description": "%config.language%"
-        },
         "aiAgentOrchestrator.ollamaEndpoint": {
           "type": "string",
           "default": "http://localhost:11434",
@@ -111,6 +102,26 @@
           "minimum": 4000,
           "maximum": 200000,
           "description": "Maximum tokens to spend on project context (related files). Increase for larger models; decrease to reduce costs."
+        },
+        "aiAgentOrchestrator.language": {
+          "type": "string",
+          "default": "auto",
+          "enum": [
+            "auto",
+            "en",
+            "ja"
+          ],
+          "enumDescriptions": [
+            "Auto (VS Code Display Language)",
+            "English",
+            "Japanese (日本語)"
+          ],
+          "description": "Global language for UI and generated workflows/plans"
+        },
+        "aiAgentOrchestrator.planSkipPreview": {
+          "type": "boolean",
+          "default": false,
+          "description": "Skip the plan preview dialog and copy directly to clipboard"
         }
       }
     }

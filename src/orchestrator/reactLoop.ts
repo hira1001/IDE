@@ -10,7 +10,7 @@ import {
 import { ToolExecutor } from '../tools/toolExecutor.js';
 import { FileChangeTracker } from '../tools/fileChangeTracker.js';
 
-const DEFAULT_MAX_ITERATIONS = 10;
+const DEFAULT_MAX_ITERATIONS = 25;
 
 export interface AgentLoopResult {
   /** Final text output from the LLM (after all tool calls complete). */
