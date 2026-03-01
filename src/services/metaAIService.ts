@@ -269,10 +269,10 @@ Output only the markdown document. No preamble. No explanation. No code fences.`
   }
 
   /**
-   * Build a compact project context string for inclusion in the Meta-AI system prompt.
-   * Includes: file tree, project metadata, and headers of related files (first 20 lines each).
-   * Designed to give the AI enough understanding of the project to generate relevant workflows
-   * without consuming excessive tokens.
+   * Build a rich project context string for inclusion in the Meta-AI system prompt.
+   * Includes: file tree, project metadata, active file content, and full related file contents.
+   * The ProjectContextProvider already applies a token budget to limit the number of related
+   * files included, so files that ARE included are passed in full for complete understanding.
    */
   static buildProjectContextForPrompt(ctx: ProjectContext): string {
     const parts: string[] = [];
@@ -293,15 +293,19 @@ Output only the markdown document. No preamble. No explanation. No code fences.`
       parts.push('');
     }
 
-    // Related files — include only headers (first 20 lines) for token efficiency
+    // Active file — full content
+    if (ctx.activeFile) {
+      parts.push(`Active File: ${ctx.activeFile.filename} [${ctx.activeFile.language_id}] (${ctx.activeFile.line_count} lines)`);
+      parts.push(ctx.activeFile.content);
+      parts.push('');
+    }
+
+    // Related files — full content (budget-controlled by ProjectContextProvider)
     if (ctx.relatedFiles && ctx.relatedFiles.length > 0) {
-      parts.push('Key Files (headers):');
-      const MAX_HEADER_LINES = 20;
+      parts.push(`Related Files (${ctx.relatedFiles.length}):`);
       for (const f of ctx.relatedFiles) {
-        const headerLines = f.content.split('\n').slice(0, MAX_HEADER_LINES).join('\n');
-        const truncated = f.content.split('\n').length > MAX_HEADER_LINES ? ' (truncated)' : '';
-        parts.push(`--- ${f.relativePath} [${f.language_id}]${truncated} ---`);
-        parts.push(headerLines);
+        parts.push(`--- ${f.relativePath} [${f.language_id}] (${f.line_count} lines, reason: ${f.reason}) ---`);
+        parts.push(f.content);
         parts.push('');
       }
     }

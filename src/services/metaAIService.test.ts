@@ -143,7 +143,7 @@ Hope it helps!`;
             expect(result).toContain('main.py');
         });
 
-        it('truncates related file content to 20 lines', () => {
+        it('includes full related file content without truncation', () => {
             const longContent = Array.from({ length: 50 }, (_, i) => `line ${i + 1}`).join('\n');
             const result = MetaAIService.buildProjectContextForPrompt({
                 mode: 'project',
@@ -162,8 +162,9 @@ Hope it helps!`;
             });
             expect(result).toContain('line 1');
             expect(result).toContain('line 20');
-            expect(result).not.toContain('line 21');
-            expect(result).toContain('(truncated)');
+            expect(result).toContain('line 21');
+            expect(result).toContain('line 50');
+            expect(result).toContain('src/big.ts');
         });
     });
 
