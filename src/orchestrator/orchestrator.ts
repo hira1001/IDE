@@ -566,9 +566,14 @@ export class Orchestrator {
         const isAbort = err instanceof Error && err.name === 'AbortError';
 
         // Do not retry on AbortError or terminal client errors (e.g., 400 Bad Request, 401 Unauthorized)
-        // Retry on 429 Too Many Requests, 500, 502, 503, 504 and network timeouts.
+        // Retry on 429 Too Many Requests (rate limit), 500, 502, 503, 504 and network timeouts.
+        // Exception: 429 with "limit: 0" or "RESOURCE_EXHAUSTED" means quota is fully depleted —
+        // no amount of retrying will help.
+        const isQuotaExhausted = errMessage.includes('429') &&
+          (errMessage.includes('limit: 0') || errMessage.includes('RESOURCE_EXHAUSTED'));
         if (
           isAbort ||
+          isQuotaExhausted ||
           attempt > maxRetries ||
           ((errMessage.includes('400') || errMessage.includes('401') || errMessage.includes('403')) && !errMessage.includes('429'))
         ) {

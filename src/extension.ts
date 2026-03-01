@@ -886,7 +886,7 @@ async function getAvailableModels(
     });
     if (res.ok) {
       const data = await res.json() as { models?: { name: string }[] };
-      ollamaModels = (data.models ?? []).map((m) => m.name);
+      ollamaModels = (data.models ?? []).map((m) => `ollama:${m.name}`);
     }
   } catch { /* Ollama not running */ }
 
