@@ -710,7 +710,11 @@ async function handleGenerateWorkflow(
 ): Promise<void> {
   const apiKeys = await getApiKeys(context);
   const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-  const opts = getContextOptions(context);
+  const baseOpts = getContextOptions(context);
+  // Use a much larger token budget for workflow generation so the Meta-AI
+  // can fully understand the project structure, dependencies, and file contents.
+  // Modern LLMs support 128K–1M context windows, so 128K is safe.
+  const opts = { ...baseOpts, mode: 'project' as const, tokenBudget: 128_000 };
   const projectCtx = await projectContextProvider.buildProjectContext(workspaceRoot, opts);
   // For meta-AI generation, always pass the active file as source (the meta prompt is light)
   const source = projectCtx.activeFile;
