@@ -19,6 +19,12 @@ export function validateWorkflow(
 ): ValidationError[] {
   const errors: ValidationError[] = [];
 
+  // Check for empty workflow
+  if (config.workflow.length === 0) {
+    errors.push({ type: 'error', message: 'Workflow has no steps.' });
+    return errors; // Nothing else to validate
+  }
+
   // Check active editor / source
   if (!source) {
     errors.push({

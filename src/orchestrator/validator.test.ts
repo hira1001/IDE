@@ -197,6 +197,48 @@ describe('validateWorkflow', () => {
     expect(errors.some((e) => e.message.toLowerCase().includes('cycle') || e.message.toLowerCase().includes('loop'))).toBe(true);
   });
 
+  it('returns error for empty workflow', () => {
+    const emptyConfig: WorkflowConfig = { agents: [], workflow: [] };
+    const errors = validateWorkflow(emptyConfig, validSource, {});
+    expect(errors.some((e) => e.message.includes('no steps'))).toBe(true);
+  });
+
+  it('returns error for then_goto referencing non-existent step', () => {
+    const badGotoConfig: WorkflowConfig = {
+      agents: [{ id: 'agent_001', name: 'Writer', persona: 'P', model: 'gpt-4o' }],
+      workflow: [{
+        step: 1, type: 'sequential', pause_after: false,
+        then_goto: 99, // does not exist
+        tasks: [{
+          task_id: 't1', agent_id: 'agent_001', task_name: 'T1',
+          instructions: [], constraints: [],
+          output_format: 'PlainText', output_key: 'o1',
+          input_mapping: [], enable_handover_note: false,
+        }],
+      }],
+    };
+    const errors = validateWorkflow(badGotoConfig, validSource, { openai: 'sk-test' });
+    expect(errors.some((e) => e.message.includes('then_goto=99'))).toBe(true);
+  });
+
+  it('returns error for conditional step missing condition config', () => {
+    const badConditionalConfig: WorkflowConfig = {
+      agents: [{ id: 'agent_001', name: 'Writer', persona: 'P', model: 'gpt-4o' }],
+      workflow: [{
+        step: 1, type: 'conditional', pause_after: false,
+        // condition is intentionally missing
+        tasks: [{
+          task_id: 't1', agent_id: 'agent_001', task_name: 'T1',
+          instructions: [], constraints: [],
+          output_format: 'PlainText', output_key: 'o1',
+          input_mapping: [], enable_handover_note: false,
+        }],
+      }],
+    };
+    const errors = validateWorkflow(badConditionalConfig, validSource, { openai: 'sk-test' });
+    expect(errors.some((e) => e.message.includes('conditional') && e.message.includes('condition config'))).toBe(true);
+  });
+
   it('does not flag __project__ or __tree__ input_mapping as unknown agents', () => {
     const config: WorkflowConfig = {
       agents: [{ id: 'agent_001', name: 'Writer', persona: 'P', model: 'gpt-4o' }],
