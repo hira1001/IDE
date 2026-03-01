@@ -356,11 +356,13 @@ async function handleWebviewMessage(
     case 'workflow:dryrun': {
       const payload = message.payload as ExecuteWorkflowPayload;
       const source = fileContextProvider.getActiveFileSnapshot();
-      if (source) {
-        const dryRunner = new DryRunner();
-        const result = dryRunner.run(payload.config, source);
-        postMessage({ type: 'workflow:dryrun', payload: { result } });
+      if (!source) {
+        vscode.window.showWarningMessage('AI Agent: Open a file in the editor before running Dry Run.');
+        break;
       }
+      const dryRunner = new DryRunner();
+      const result = dryRunner.run(payload.config, source);
+      postMessage({ type: 'workflow:dryrun', payload: { result } });
       break;
     }
 
