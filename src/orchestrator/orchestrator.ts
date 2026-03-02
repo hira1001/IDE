@@ -509,6 +509,12 @@ export class Orchestrator {
         'complete',
         `${result.totalInputTokens}in+${result.totalOutputTokens}out tokens, ${result.iterations} iterations, ${result.filesChanged.length} files changed`
       );
+
+      // Record file changes for context propagation to subsequent steps
+      if (result.filesChanged.length > 0) {
+        this.stateManager.addFileChanges(stepNumber, taskId, result.filesChanged);
+      }
+
       this.emit();
     } finally {
       this.activeLoopAbortControllers.delete(taskId);

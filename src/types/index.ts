@@ -219,6 +219,8 @@ export interface ExecutionState {
   total_input_tokens: number;
   total_output_tokens: number;
   total_cost_usd: number;
+  /** Files changed per step — used for context propagation between steps. */
+  step_file_changes: Map<number, Array<{ path: string; taskId: string }>>;
 }
 
 // ─── Template ─────────────────────────────────────────────────────────────────
@@ -439,6 +441,7 @@ export interface SerializedExecutionState {
   total_input_tokens: number;
   total_output_tokens: number;
   total_cost_usd: number;
+  step_file_changes?: Record<string, Array<{ path: string; taskId: string }>>;
 }
 
 // template:save payload

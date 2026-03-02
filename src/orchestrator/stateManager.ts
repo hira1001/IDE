@@ -39,6 +39,7 @@ export class StateManager {
       total_input_tokens: 0,
       total_output_tokens: 0,
       total_cost_usd: 0,
+      step_file_changes: new Map(),
     };
   }
 
@@ -142,6 +143,38 @@ export class StateManager {
     return this.state.output_store;
   }
 
+  // ─── File Change Tracking ──────────────────────────────────────────────────
+
+  /** Record files changed by a task in a specific step. */
+  addFileChanges(step: number, taskId: string, files: string[]): void {
+    if (files.length === 0) return;
+    const existing = this.state.step_file_changes.get(step) ?? [];
+    for (const file of files) {
+      if (!existing.some((e) => e.path === file && e.taskId === taskId)) {
+        existing.push({ path: file, taskId });
+      }
+    }
+    this.state.step_file_changes.set(step, existing);
+  }
+
+  /** Get all file changes from a specific step. */
+  getFileChangesForStep(step: number): Array<{ path: string; taskId: string }> {
+    return this.state.step_file_changes.get(step) ?? [];
+  }
+
+  /** Get all file changes from all completed steps up to (not including) the given step. */
+  getFileChangesBeforeStep(step: number): Array<{ path: string; taskId: string; step: number }> {
+    const result: Array<{ path: string; taskId: string; step: number }> = [];
+    this.state.step_file_changes.forEach((changes, s) => {
+      if (s < step) {
+        for (const c of changes) {
+          result.push({ ...c, step: s });
+        }
+      }
+    });
+    return result.sort((a, b) => a.step - b.step);
+  }
+
   // ─── Handover Notes ───────────────────────────────────────────────────────
 
   addHandoverNote(note: HandoverNote): void {
@@ -237,6 +270,11 @@ export class StateManager {
       outputStore[k] = v;
     });
 
+    const stepFileChanges: Record<string, Array<{ path: string; taskId: string }>> = {};
+    this.state.step_file_changes.forEach((v, k) => {
+      stepFileChanges[String(k)] = v;
+    });
+
     return {
       workflow_id: this.state.workflow_id,
       status: this.state.status,
@@ -249,6 +287,7 @@ export class StateManager {
       total_input_tokens: this.state.total_input_tokens,
       total_output_tokens: this.state.total_output_tokens,
       total_cost_usd: this.state.total_cost_usd,
+      step_file_changes: stepFileChanges,
     };
   }
 
@@ -269,6 +308,13 @@ export class StateManager {
     for (const [k, v] of Object.entries(data.output_store)) {
       outputStore.set(k, v);
     }
+    const stepFileChanges = new Map<number, Array<{ path: string; taskId: string }>>();
+    if (data.step_file_changes) {
+      for (const [k, v] of Object.entries(data.step_file_changes)) {
+        stepFileChanges.set(Number(k), v);
+      }
+    }
+
     this.state = {
       workflow_id: data.workflow_id,
       status: data.status,
@@ -281,6 +327,7 @@ export class StateManager {
       total_input_tokens: data.total_input_tokens,
       total_output_tokens: data.total_output_tokens,
       total_cost_usd: data.total_cost_usd,
+      step_file_changes: stepFileChanges,
     };
   }
 }

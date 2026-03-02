@@ -361,11 +361,25 @@ Output only the markdown document. No preamble. No explanation. No code fences.`
    * Produces human-readable Markdown that an external AI agent
    * (Antigravity, Cursor, etc.) can follow step-by-step.
    */
-  async generatePlan(prompt: string, language: string = 'ja', config?: WorkflowConfig): Promise<string> {
+  async generatePlan(
+    prompt: string,
+    language: string = 'ja',
+    config?: WorkflowConfig,
+    projectContext?: ProjectContext | null
+  ): Promise<string> {
     const systemPrompt = PLAN_PROMPT_TEMPLATE[language] ?? PLAN_PROMPT_TEMPLATE['en'];
 
     // Build a rich user prompt that includes full workflow context
-    let userPrompt = prompt ? `## ユーザーの指示\n${prompt}\n\n` : '';
+    let userPrompt = '';
+
+    // Inject project context for full project understanding
+    if (projectContext) {
+      userPrompt += `## プロジェクトコンテキスト\n${MetaAIService.buildProjectContextForPrompt(projectContext)}\n\n`;
+    }
+
+    if (prompt) {
+      userPrompt += `## ユーザーの指示\n${prompt}\n\n`;
+    }
 
     if (config) {
       userPrompt += '## 生成済みワークフロー構成\n\n';

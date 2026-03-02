@@ -646,9 +646,15 @@ async function handleWebviewMessage(
         const defaultModel = cfg.get<string>('defaultModel') || 'gpt-4o';
         const metaAI = new MetaAIService(apiKeys, defaultModel);
 
+        // Build full project context for plan generation (same as workflow generation)
+        const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        const baseOpts = getContextOptions(context);
+        const planOpts = { ...baseOpts, mode: 'project' as const, tokenBudget: 128_000 };
+        const projectCtx = await projectContextProvider.buildProjectContext(workspaceRoot, planOpts);
+
         const savedLang = cfg.get<string>('language') || 'auto';
         const targetLanguage = savedLang === 'auto' ? vscode.env.language : savedLang;
-        const markdown = await metaAI.generatePlan(p.prompt, targetLanguage, p.config);
+        const markdown = await metaAI.generatePlan(p.prompt, targetLanguage, p.config, projectCtx);
 
         const skipPreview = cfg.get<boolean>('planSkipPreview') || false;
         if (skipPreview) {

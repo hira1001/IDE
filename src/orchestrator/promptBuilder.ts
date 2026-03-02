@@ -139,9 +139,18 @@ ${handoverSection}${loopNote}${agentModeSection}
 
     const noteSection = notes.length > 0 ? `\n## 引き継ぎメモ:\n${notes.join('\n')}` : '';
 
-    return `<user_data>
-${sections.join('\n\n')}${noteSection}
-</user_data>`;
+    // Inject file change context from previous steps
+    const currentStep = this.stateManager.getCurrentStep();
+    const recentChanges = this.stateManager.getFileChangesBeforeStep(currentStep);
+    let changeSection = '';
+    if (recentChanges.length > 0) {
+      const changeLines = recentChanges.map(
+        (c) => `- Step ${c.step}: ${c.path}`
+      );
+      changeSection = `\n\n<recent_changes>\n前のステップで以下のファイルが変更されました。これらの変更を考慮して作業してください。\n${changeLines.join('\n')}\n</recent_changes>`;
+    }
+
+    return `<user_data>\r\n${sections.join('\n\n')}${noteSection}${changeSection}\r\n</user_data>`;
   }
 
   /** Build the <project_context> XML block for __project__ mapping. */
