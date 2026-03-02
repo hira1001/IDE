@@ -270,7 +270,8 @@ Output only the markdown document. No preamble. No explanation. No code fences.`
 
   /**
    * Build a rich project context string for inclusion in the Meta-AI system prompt.
-   * Includes: file tree, project metadata, active file content, and full related file contents.
+   * Includes: file tree, project metadata, active file content, full related file contents,
+   * and an API surface skeleton showing exported symbols.
    * The ProjectContextProvider already applies a token budget to limit the number of related
    * files included, so files that ARE included are passed in full for complete understanding.
    */
@@ -293,6 +294,17 @@ Output only the markdown document. No preamble. No explanation. No code fences.`
       parts.push('');
     }
 
+    // API Surface skeleton — exported classes, functions, interfaces, types
+    if (ctx.relatedFiles && ctx.relatedFiles.length > 0) {
+      const skeletonLines = MetaAIService.extractApiSurface(ctx.relatedFiles);
+      if (skeletonLines) {
+        parts.push('<api_surface>');
+        parts.push(skeletonLines);
+        parts.push('</api_surface>');
+        parts.push('');
+      }
+    }
+
     // Active file — full content
     if (ctx.activeFile) {
       parts.push(`Active File: ${ctx.activeFile.filename} [${ctx.activeFile.language_id}] (${ctx.activeFile.line_count} lines)`);
@@ -311,6 +323,42 @@ Output only the markdown document. No preamble. No explanation. No code fences.`
     }
 
     return parts.join('\n');
+  }
+
+  /**
+   * Extract exported API surface from related files.
+   * Returns a compact skeleton of exported classes, functions, interfaces, types.
+   */
+  private static extractApiSurface(files: import('../types/index.js').ContextFile[]): string {
+    const SKELETON_LANGS = new Set(['typescript', 'typescriptreact', 'javascript', 'javascriptreact']);
+    const lines: string[] = [];
+
+    for (const file of files) {
+      if (!SKELETON_LANGS.has(file.language_id)) continue;
+
+      const exports: string[] = [];
+      for (const line of file.content.split('\n')) {
+        const trimmed = line.trim();
+        const classMatch = trimmed.match(/^export\s+(?:abstract\s+)?class\s+(\w+)/);
+        if (classMatch) { exports.push(`class ${classMatch[1]}`); continue; }
+        const ifaceMatch = trimmed.match(/^export\s+interface\s+(\w+)/);
+        if (ifaceMatch) { exports.push(`interface ${ifaceMatch[1]}`); continue; }
+        const typeMatch = trimmed.match(/^export\s+type\s+(\w+)/);
+        if (typeMatch) { exports.push(`type ${typeMatch[1]}`); continue; }
+        const funcMatch = trimmed.match(/^export\s+(?:async\s+)?function\s+(\w+)\s*\(([^)]*)\)/);
+        if (funcMatch) { exports.push(`function ${funcMatch[1]}(${funcMatch[2].trim()})`); continue; }
+        const constMatch = trimmed.match(/^export\s+(?:const|let|var)\s+(\w+)/);
+        if (constMatch) { exports.push(`const ${constMatch[1]}`); continue; }
+        const enumMatch = trimmed.match(/^export\s+enum\s+(\w+)/);
+        if (enumMatch) { exports.push(`enum ${enumMatch[1]}`); continue; }
+      }
+
+      if (exports.length > 0) {
+        lines.push(`${file.relativePath}: ${exports.join(', ')}`);
+      }
+    }
+
+    return lines.join('\n');
   }
 
   private validateConfig(config: unknown): asserts config is WorkflowConfig {

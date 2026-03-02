@@ -81,7 +81,7 @@ const LANG_MAP: Record<string, string> = {
  *   Layer 3: Related files (~1000-20000 tok.) — import-resolved, budget-capped
  */
 export class ProjectContextProvider {
-  constructor(private readonly fileContextProvider: FileContextProvider) {}
+  constructor(private readonly fileContextProvider: FileContextProvider) { }
 
   /**
    * Build the full ProjectContext for the active workspace.
@@ -478,6 +478,96 @@ export class ProjectContextProvider {
     };
     walk(root, 0);
     return count;
+  }
+
+  // ─── Project Skeleton (API Surface Extraction) ───────────────────────────────
+
+  /**
+   * Build a compact "project skeleton" — the exported API surface of key files.
+   * Extracts: exported classes, functions, interfaces, types, and constants.
+   * Uses regex-based extraction (no AST parser dependency needed).
+   *
+   * Returns a formatted string like:
+   *   src/orchestrator/orchestrator.ts:
+   *     export class Orchestrator
+   *       execute(config: WorkflowConfig, source: ProjectContext): Promise<void>
+   *       abort(): void
+   */
+  buildProjectSkeleton(relatedFiles: ContextFile[]): string {
+    const SKELETON_LANGS = new Set(['typescript', 'typescriptreact', 'javascript', 'javascriptreact']);
+    const lines: string[] = [];
+
+    for (const file of relatedFiles) {
+      if (!SKELETON_LANGS.has(file.language_id)) continue;
+
+      const exports = this.extractExports(file.content);
+      if (exports.length === 0) continue;
+
+      lines.push(`${file.relativePath}:`);
+      for (const exp of exports) {
+        lines.push(`  ${exp}`);
+      }
+      lines.push('');
+    }
+
+    return lines.join('\n');
+  }
+
+  /**
+   * Extract exported symbols from a TypeScript/JavaScript file.
+   * Returns array of signature strings (one per export).
+   */
+  private extractExports(content: string): string[] {
+    const exports: string[] = [];
+    const lines = content.split('\n');
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+
+      // export class Foo { ... } or export abstract class Foo extends Bar
+      const classMatch = trimmed.match(/^export\s+(?:abstract\s+)?class\s+(\w+)(?:\s+(?:extends|implements)\s+\S+)?/);
+      if (classMatch) {
+        exports.push(`class ${classMatch[1]}`);
+        continue;
+      }
+
+      // export interface Foo { ... }
+      const ifaceMatch = trimmed.match(/^export\s+interface\s+(\w+)(?:\s+extends\s+\S+)?/);
+      if (ifaceMatch) {
+        exports.push(`interface ${ifaceMatch[1]}`);
+        continue;
+      }
+
+      // export type Foo = ...
+      const typeMatch = trimmed.match(/^export\s+type\s+(\w+)/);
+      if (typeMatch) {
+        exports.push(`type ${typeMatch[1]}`);
+        continue;
+      }
+
+      // export function foo(...) or export async function foo(...)
+      const funcMatch = trimmed.match(/^export\s+(?:async\s+)?function\s+(\w+)\s*\(([^)]*)\)/);
+      if (funcMatch) {
+        exports.push(`function ${funcMatch[1]}(${funcMatch[2].trim()})`);
+        continue;
+      }
+
+      // export const FOO = ... or export let bar = ...
+      const constMatch = trimmed.match(/^export\s+(?:const|let|var)\s+(\w+)/);
+      if (constMatch) {
+        exports.push(`const ${constMatch[1]}`);
+        continue;
+      }
+
+      // export enum Foo { ... }
+      const enumMatch = trimmed.match(/^export\s+enum\s+(\w+)/);
+      if (enumMatch) {
+        exports.push(`enum ${enumMatch[1]}`);
+        continue;
+      }
+    }
+
+    return exports;
   }
 
   // ─── Private: Token Estimation ───────────────────────────────────────────────
