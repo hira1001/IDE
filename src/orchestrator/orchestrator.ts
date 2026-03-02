@@ -22,6 +22,7 @@ import { FileChangeTracker } from '../tools/fileChangeTracker.js';
 import { ToolExecutor, VscodeApiForTools } from '../tools/toolExecutor.js';
 import { AgentLoopEngine } from './reactLoop.js';
 import { VscodeLMApi } from '../llm/vscodeLMAdapter.js';
+import { HealthCheck } from './healthCheck.js';
 
 export type StatusCallback = (state: SerializedExecutionState) => void;
 export type PauseCallback = (stepIndex: number, outputs: Record<string, string>) => Promise<void>;
@@ -62,6 +63,8 @@ export class Orchestrator {
   private readonly activeGateways: Map<string, ReturnType<typeof getGateway>> = new Map();
   /** Tracks AbortControllers for active ReAct loops so abort() can cancel them. */
   private readonly activeLoopAbortControllers: Map<string, AbortController> = new Map();
+  /** Incremental diagnostic checker between workflow steps. */
+  private readonly healthCheck: HealthCheck;
 
   constructor(private readonly options: OrchestratorOptions) {
     this.stateManager = new StateManager();
@@ -69,6 +72,11 @@ export class Orchestrator {
     this.conditionEvaluator = new ConditionEvaluator();
     this.abortManager = new AbortManager();
     this.timeout = options.timeout ?? 60_000;
+    this.healthCheck = new HealthCheck(
+      options.vscode,
+      options.workspaceRoot ?? process.cwd(),
+      this.stateManager
+    );
   }
 
   getStateManager(): StateManager {
@@ -93,6 +101,9 @@ export class Orchestrator {
     }
 
     this.emit();
+
+    // Capture diagnostic baseline before workflow starts
+    this.healthCheck.captureBaseline();
 
     try {
       await this.runWorkflow(config);
@@ -228,6 +239,12 @@ export class Orchestrator {
           stepIndex = nextStep;
           continue;
         }
+      }
+
+      // Incremental verification: check for new errors after each step
+      if (this.stateManager.getStatus() !== 'aborted') {
+        this.healthCheck.checkAfterStep(step.step);
+        this.emit();
       }
 
       if (step.pause_after && this.stateManager.getStatus() !== 'aborted') {
